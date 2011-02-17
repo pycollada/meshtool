@@ -1,3 +1,0 @@
-[submodule "collada"]
-	path = collada
-	url = git://github.com/pycollada/pycollada.git
