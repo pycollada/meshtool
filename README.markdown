@@ -1,10 +1,10 @@
 INSTALLATION
 ============
- git clone git://github.com/pycollada/meshtool.git meshtool
- cd meshtool
- git submodule init
- git submodule update
- ./meshtool-cli --help
+   git clone git://github.com/pycollada/meshtool.git meshtool
+   cd meshtool
+   git submodule init
+   git submodule update
+   ./meshtool-cli --help
 
 FILTER LIST
 ===========
@@ -14,6 +14,6 @@ FILTER LIST
 
 EXAMPLES
 ========
- $ ./meshtool-cli --load_collada duck.dae --print_textures
- ./duckCM.tga
- $
+   $ ./meshtool-cli --load_collada duck.dae --print_textures
+   ./duckCM.tga
+   $
