@@ -13,5 +13,7 @@ import print_filters.print_textures as m
 registerModule(m)
 
 #Save filters last
+import save_filters.save_screenshot as m
+registerModule(m)
 import save_filters.save_collada as m
 registerModule(m)

@@ -11,6 +11,7 @@ FILTER LIST
 * load_collada file - Loads a collada file from file
 * save_collada file - Saves the collada file to file
 * print_textures - Prints a list of textures
+* save_screenshot - Saves a screenshot of rendered collada to file (no textures) - depends on [Panda3d](http://www.panda3d.org/)
 
 EXAMPLES
 ========
