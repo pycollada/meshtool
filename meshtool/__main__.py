@@ -1,7 +1,6 @@
 import sys
 import argparse
 import filters
-import filters.discover
 import collada
 
 def usage_exit(parser, str):
