@@ -8,10 +8,12 @@ INSTALLATION
 
 FILTER LIST
 ===========
-* load_collada file - Loads a collada file from file
-* save_collada file - Saves the collada file to file
-* print_textures - Prints a list of textures
-* save_screenshot - Saves a screenshot of rendered collada to file (no textures) - depends on [Panda3d](http://www.panda3d.org/)
+* <pre>--load_collada file</pre> - Loads a collada file
+* <pre>--save_collada file</pre> - Saves a collada file
+* <pre>--print_textures</pre> - Prints a list of the embedded images in the mesh
+* <pre>--save_screenshot file</pre> - Saves a screenshot of the rendered collada file - depends on [Panda3d](http://www.panda3d.org/)
+* <pre>--save_rotate_screenshots file N W H</pre> - Saves N screenshots of size WxH, rotating evenly spaced around the object between shots. Each screenshot file will be file.n.png - depends on [Panda3d](http://www.panda3d.org/)
+* <pre>--viewer</pre> - Uses panda3d to bring up a viewer - depends on [Panda3d](http://www.panda3d.org/)
 
 EXAMPLES
 ========
