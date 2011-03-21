@@ -8,7 +8,7 @@ INSTALLATION
 
 FILTER LIST
 ===========
-* ``--load_collada file` - Loads a collada file
+* ``--load_collada file`` - Loads a collada file
 * ``--save_collada file`` - Saves a collada file
 * ``--print_textures`` - Prints a list of the embedded images in the mesh
 * ``--save_screenshot file`` - Saves a screenshot of the rendered collada file - depends on [Panda3d](http://www.panda3d.org/)
