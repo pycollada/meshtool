@@ -5,5 +5,5 @@ setup (name = "Meshtool",
             version = "0.1",
             description = "Tool for manipulating collada meshes",
             author = "Jeff Terrace",
-            packages = ['meshtool', 'meshtool.filters']
+            packages = ['meshtool', 'meshtool.filters', 'meshtool.args']
             )
