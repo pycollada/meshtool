@@ -18,7 +18,7 @@ def saveRotateScreenshots(p3dapp, basename, N, W, H):
         p3dapp.taskMgr.step()
         pilimage = getScreenshot(p3dapp)
         pilimage.thumbnail((W,H), Image.ANTIALIAS)
-        pilimage.save("%s.%d.png" % (basename, i), option='optimize')
+        pilimage.save("%s.%d.png" % (basename, i), optimize=1)
 
 def FilterGenerator():
     class SaveScreenshotFilter(SaveFilter):
