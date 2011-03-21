@@ -18,6 +18,7 @@ registerModule('filters.load_filters.load_collada')
 #Op filters next
 registerModule('filters.print_filters.print_textures')
 registerModule('filters.panda_filters.viewer')
+registerModule('filters.print_filters.print_json')
 
 #Save filters last
 registerModule('filters.panda_filters.save_screenshot')
