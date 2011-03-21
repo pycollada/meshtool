@@ -1,10 +1,10 @@
-from args import *
-from ..base_filters import *
+from meshtool.args import *
+from meshtool.filters.base_filters import *
 import os.path
 from math import pi
 import Image
 
-from pandacore import setupPandaApp, getScreenshot, setCameraAngle
+from meshtool.filters.panda_filters.pandacore import setupPandaApp, getScreenshot, setCameraAngle
 
 def saveRotateScreenshots(p3dapp, basename, N, W, H):
     min_angle = 0.0

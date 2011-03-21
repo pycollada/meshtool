@@ -1,5 +1,5 @@
-from args import *
-from ..base_filters import *
+from meshtool.args import *
+from meshtool.filters.base_filters import *
 import os
 
 def FilterGenerator():

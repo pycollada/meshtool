@@ -1,4 +1,4 @@
-from args import *
+from meshtool.args import *
 
 class FilterException(Exception):
     """Exception message thrown by a filter"""

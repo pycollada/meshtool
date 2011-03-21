@@ -1,5 +1,5 @@
-from args import *
-from ..base_filters import *
+from meshtool.args import *
+from meshtool.filters.base_filters import *
 import collada
 import os
 
@@ -12,7 +12,7 @@ def FilterGenerator():
                 raise FilterException("argument is not a valid file")
             try:
                 col = collada.Collada(filename)
-            except collada.DaeError as e:
+            except collada.DaeError, e:
                 print e
                 raise FilterException("errors while loading file")
                 

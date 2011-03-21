@@ -3,4 +3,4 @@
 workdir=`echo "$0" | awk -F/ 'NR<NF{print $NR}'`
 cd $workdir
 
-PYTHONPATH="./externals/collada" python meshtool $@
+PYTHONPATH="./externals/collada:." python meshtool $@

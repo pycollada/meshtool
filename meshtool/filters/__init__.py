@@ -1,4 +1,4 @@
-from base_filters import *
+from meshtool.filters.base_filters import *
 import sys
 
 factory = FilterFactory()
@@ -13,14 +13,14 @@ def registerModule(mod):
     factory.register(m.FilterGenerator().name, m.FilterGenerator)
 
 #Load filters first
-registerModule('filters.load_filters.load_collada')
+registerModule('meshtool.filters.load_filters.load_collada')
 
 #Op filters next
-registerModule('filters.print_filters.print_textures')
-registerModule('filters.panda_filters.viewer')
-registerModule('filters.print_filters.print_json')
+registerModule('meshtool.filters.print_filters.print_textures')
+registerModule('meshtool.filters.panda_filters.viewer')
+registerModule('meshtool.filters.print_filters.print_json')
 
 #Save filters last
-registerModule('filters.panda_filters.save_screenshot')
-registerModule('filters.panda_filters.save_rotate_screenshots')
-registerModule('filters.save_filters.save_collada')
+registerModule('meshtool.filters.panda_filters.save_screenshot')
+registerModule('meshtool.filters.panda_filters.save_rotate_screenshots')
+registerModule('meshtool.filters.save_filters.save_collada')

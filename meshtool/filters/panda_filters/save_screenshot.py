@@ -1,8 +1,8 @@
-from args import *
-from ..base_filters import *
+from meshtool.args import *
+from meshtool.filters.base_filters import *
 import os.path
 
-from pandacore import setupPandaApp, getScreenshot
+from meshtool.filters.panda_filters.pandacore import setupPandaApp, getScreenshot
 
 def saveScreenshot(p3dapp, filename):
     pilimage = getScreenshot(p3dapp)

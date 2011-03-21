@@ -1,6 +1,10 @@
-from args import *
-from ..base_filters import *
-import json
+from meshtool.args import *
+from meshtool.filters.base_filters import *
+
+try:
+    import json
+except ImportError:
+    import simplejson as json
 
 def getJSON(mesh):
     cameras = []

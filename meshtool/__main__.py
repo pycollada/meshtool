@@ -1,6 +1,6 @@
 import sys
 import argparse
-import filters
+import meshtool.filters as filters
 import collada
 
 def usage_exit(parser, str):
@@ -37,7 +37,7 @@ def main():
         usage_exit(parser, "first argument must be a load filter")
     try:
         collada_inst = load_filter_inst.apply(*load_filter_args)
-    except filters.FilterException as e:
+    except filters.FilterException, e:
         sys.exit("Error: (argument %d) '%s': %s" % (1,load_filter_name,str(e)))
     if not isinstance(collada_inst, collada.Collada):
         sys.exit("Error: got an incorrect return value from filter (argument %d) '%s' " % (1, load_filter_name))
@@ -50,7 +50,7 @@ def main():
             usage_exit(parser, "specified filter (argument %d:'%s') is not an operation filter" % (i+1, filter))
         try:
             collada_inst = inst.apply(collada_inst, *arguments)
-        except filters.FilterException as e:
+        except filters.FilterException, e:
             sys.exit("Error: (argument %d) '%s': %s" % (i+1,filter,str(e)))
         if not isinstance(collada_inst, collada.Collada):
             sys.exit("Error: got an incorrect return value from filter (argument %d) '%s' " % (i+1, filter))
