@@ -66,7 +66,7 @@ def getNodeFromController(controller, controlled_prim):
             transform = GeomVertexWriter(vdata, 'transform_blend') 
             
             numtris = 0
-            if type(controlled_prim.primitive) is collada.polylist.BoundPolygonList:
+            if type(controlled_prim.primitive) is collada.polylist.BoundPolylist:
                 for poly in controlled_prim.primitive.polygons():
                     for tri in poly.triangles():
                         for tri_pt in range(3):
@@ -192,7 +192,7 @@ def getNodeFromGeom(prim):
             
             (vdata, gprim) = getPrimAndDataFromTri(prim)
             
-        elif type(prim) is collada.polylist.BoundPolygonList or \
+        elif type(prim) is collada.polylist.BoundPolylist or \
             type(prim) is collada.polygons.BoundPolygons:
             
             triset = prim.triangleset()
