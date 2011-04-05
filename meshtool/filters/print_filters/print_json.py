@@ -28,7 +28,7 @@ def getJSON(mesh):
         for i, prim in enumerate(geom.primitives):
             primitives.append({'id':"%s%d" % (geom.id, i),
                                'type':type(prim).__name__,
-                               'vertices':len(prim.vertex_index),
+                               'vertices':len(prim.vertex_index) if prim.vertex_index is not None else 0,
                                'normals': prim.normal_index is not None,
                                'texcoords': len(prim.texcoord_indexset) > 0})
         

@@ -315,14 +315,16 @@ def getNodesFromCollada(col):
     nodes = []
     for geom in col.scene.objects('geometry'):
         for prim in geom.primitives():
-            node = getNodeFromGeom(prim)
-            nodes.append(node)
+            if prim.vertex is not None and len(prim.vertex) > 0:
+                node = getNodeFromGeom(prim)
+                nodes.append(node)
     
     for controller in col.scene.objects('controller'):
         for controlled_prim in controller.primitives():
             for prim in controlled_prim.boundskin.geometry.primitives():
-                node = getNodeFromGeom(prim)
-                nodes.append(node)
+                if prim.vertex is not None and len(prim.vertex) > 0:
+                    node = getNodeFromGeom(prim)
+                    nodes.append(node)
     return nodes
 
 def setupPandaApp(mesh):
