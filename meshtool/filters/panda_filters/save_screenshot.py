@@ -6,7 +6,7 @@ from meshtool.filters.panda_filters.pandacore import setupPandaApp, getScreensho
 
 def saveScreenshot(p3dapp, filename):
     pilimage = getScreenshot(p3dapp)
-    pilimage.save(filename)
+    pilimage.save(filename, optimize=1)
 
 def FilterGenerator():
     class SaveScreenshotFilter(SaveFilter):
