@@ -222,9 +222,9 @@ def getStateFromMaterial(prim_material):
     
     mat = Material()
     
-    if prim_material:
-        for prop in prim_material.supported:
-            value = getattr(prim_material, prop)
+    if prim_material and prim_material.effect:
+        for prop in prim_material.effect.supported:
+            value = getattr(prim_material.effect, prop)
             if value is None:
                 continue
             
