@@ -13,8 +13,9 @@ from panda3d.core import GeomVertexData, GeomEnums, GeomVertexWriter
 from panda3d.core import GeomLines, GeomTriangles, Geom, GeomNode, NodePath
 from panda3d.core import PNMImage, Texture, StringStream
 from panda3d.core import RenderState, TextureAttrib, MaterialAttrib, Material
-from panda3d.core import VBase4, Vec4, Mat4, SparseArray
-from panda3d.core import AmbientLight, DirectionalLight
+from panda3d.core import TextureStage
+from panda3d.core import VBase4, Vec4, Mat4, SparseArray, Vec3
+from panda3d.core import AmbientLight, DirectionalLight, PointLight, Spotlight
 from panda3d.core import Character, PartGroup, CharacterJoint
 from panda3d.core import TransformBlend, TransformBlendTable, JointVertexTransform
 from panda3d.core import GeomVertexAnimationSpec, GeomVertexArrayFormat, InternalName
@@ -217,12 +218,24 @@ def getNodeFromGeom(prim):
         
         return node
 
+def getTexture(value):
+    image_data = value.sampler.surface.image.data
+    if image_data:
+        myImage = PNMImage()
+        myImage.read(StringStream(image_data), posixpath.basename(value.sampler.surface.image.path))
+        myTexture = Texture(value.sampler.surface.image.id)
+        myTexture.load(myImage)
+        return myTexture
+    else:
+        return None
+
 def getStateFromMaterial(prim_material):
     state = RenderState.makeFullDefault()
     
     mat = Material()
     
     if prim_material and prim_material.effect:
+        texattr = TextureAttrib.makeAllOff()
         for prop in prim_material.effect.supported:
             value = getattr(prim_material.effect, prop)
             if value is None:
@@ -232,25 +245,33 @@ def getStateFromMaterial(prim_material):
                 val4 = value[3] if len(value) > 3 else 1.0
                 value = VBase4(value[0], value[1], value[2], val4)
             
-            if isinstance(value, collada.material.Map):
-                image_data = value.sampler.surface.image.data
-                if image_data:
-                    myImage = PNMImage()
-                    myImage.read(StringStream(image_data), posixpath.basename(value.sampler.surface.image.path))
-                    myTexture = Texture(value.sampler.surface.image.id)
-                    myTexture.load(myImage)
-                    state = state.addAttrib(TextureAttrib.make(myTexture))
-            elif prop == 'emission':
+            if prop == 'emission':
                 mat.setEmission(value)
             elif prop == 'ambient':
                 mat.setAmbient(value)
             elif prop == 'diffuse':
-                mat.setDiffuse(value)
+                if isinstance(value, collada.material.Map):
+                    myTexture = getTexture(value)
+                    if myTexture:
+                        ts = TextureStage('tsDiff')
+                        ts.setMode(TextureStage.MModulate)
+                        texattr = texattr.addOnStage(ts, myTexture)
+                else:
+                    mat.setDiffuse(value)
             elif prop == 'specular':
-                #mat.setSpecular(value)
                 pass
+                #disabling this until we figure out how to properly support specular lighting
+                #if isinstance(value, collada.material.Map):
+                #    myTexture = getTexture(value)
+                #    if myTexture:
+                #        ts = TextureStage('tsSpec')
+                #        ts.setMode(TextureStage.MGlow)
+                #        texattr = texattr.addOnStage(ts, myTexture)
+                #mat.setSpecular(value)
             elif prop == 'shininess':
-                mat.setShininess(value)
+                pass
+                #disabling this until we figure out how to properly support specular lighting
+                #mat.setShininess(value)
             elif prop == 'reflective':
                 pass
             elif prop == 'reflectivity':
@@ -261,6 +282,7 @@ def getStateFromMaterial(prim_material):
                 pass
 
     state = state.addAttrib(MaterialAttrib.make(mat))
+    state = state.addAttrib(texattr)
     return state
 
 def setCameraAngle(ang):
@@ -275,23 +297,60 @@ def spinCameraTask(task):
     setCameraAngle(angleRadians)
     return Task.cont
 
+def ColorToVec4(colorstring):
+    r, g, b = colorstring[:2], colorstring[2:4], colorstring[4:]
+    r, g, b = [int(n, 16) for n in (r, g, b)]
+    r, g, b = [n / 255.0 for n in (r, g, b)]
+    return Vec4(r, g, b, 1)
+
+def rotsToMat4(x, y, z):
+    rotx = Mat4(1,0,0,0,0,cos(x),-sin(x),0,0,sin(x),cos(x),0,0,0,0,1);
+    roty = Mat4(cos(y),0,sin(y),0,0,1,0,0,-sin(y),0,cos(y),0,0,0,0,1);
+    rotz = Mat4(cos(z),-sin(z),0,0,sin(z),cos(z),0,0,0,0,1,0,0,0,0,1);
+    swapyz = Mat4.rotateMat(90, Vec3(-1,0,0))
+    print swapyz
+    return rotx * roty * rotz * swapyz
+
 def attachLights(render):
-    ambientLight = AmbientLight('ambientLight')
-    ambientLight.setColor(Vec4(0.1, 0.1, 0.1, 1))
-    ambientLightNP = render.attachNewNode(ambientLight)
-    render.setLight(ambientLightNP)
+    dl = DirectionalLight('dirLight')
+    dl.setColor(ColorToVec4('666060'))
+    dlNP = render.attachNewNode(dl)
+    dlNP.setHpr(0, -45, 0)
+    render.setLight(dlNP)
     
-    directionalPoints = [(10,0,0), (-10,0,0),
-                         (0,-10,0), (0,10,0),
-                         (0, 0, -10), (0,0,10)]
+    dl = DirectionalLight('dirLight')
+    dl.setColor(ColorToVec4('606666'))
+    dlNP = render.attachNewNode(dl)
+    dlNP.setHpr(180, 45, 0)
+    render.setLight(dlNP)
     
-    for pt in directionalPoints:
-        directionalLight = DirectionalLight('directionalLight')
-        directionalLight.setColor(Vec4(0.4, 0.4, 0.4, 1))
-        directionalLightNP = render.attachNewNode(directionalLight)
-        directionalLightNP.setPos(pt[0], pt[1], pt[2])
-        directionalLightNP.lookAt(0,0,0)
-        render.setLight(directionalLightNP)
+    dl = DirectionalLight('dirLight')
+    dl.setColor(ColorToVec4('606060'))
+    dlNP = render.attachNewNode(dl)
+    dlNP.setHpr(90, -45, 0)
+    render.setLight(dlNP)
+    
+    dl = DirectionalLight('dirLight')
+    dl.setColor(ColorToVec4('626262'))
+    dlNP = render.attachNewNode(dl)
+    dlNP.setHpr(-90, 45, 0)
+    render.setLight(dlNP)
+    
+    #ambientLight = AmbientLight('ambientLight')
+    #ambientLight.setColor(Vec4(0.1, 0.1, 0.1, 1))
+    #ambientLightNP = render.attachNewNode(ambientLight)
+    #render.setLight(ambientLightNP)
+    
+    #directionalPoints = [(-15,10,-12), (-13,-14,11)]#,
+                         #(0,-10,0), (0,10,0),
+                         #(0, 0, -10), (0,0,10)]
+    
+    #for pt in directionalPoints:
+    #    plight = PointLight('plight')
+    #    plight.setColor(Vec4(1, 1, 1, 1))
+    #    plightNP = render.attachNewNode(plight)
+    #    plightNP.setPos(pt[0], pt[1], pt[2])
+    #    render.setLight(plightNP)
 
 def getBaseNodePath(render):
     globNode = GeomNode("collada")
@@ -337,6 +396,7 @@ def setupPandaApp(mesh):
     ensureCameraAt(nodePath, base.camera)
     base.disableMouse()
     attachLights(render)
+    render.setShaderAuto()
     return p3dApp
 
 def getScreenshot(p3dApp):
