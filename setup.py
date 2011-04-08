@@ -8,7 +8,7 @@ setup(
     author_email = 'jterrace@gmail.com',
     platforms=["any"],
     license="BSD",
-    install_requires=['pycollada>=0.1', 'PIL'],
+    install_requires=['pycollada>=0.1', 'PIL', 'argparse'],
     url = "https://github.com/pycollada/meshtool",
     entry_points = {
         'console_scripts':[
