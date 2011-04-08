@@ -231,7 +231,10 @@ def getTexture(value):
             myTexture.load(myImage)
         else:
             #Except for DDS, which PNMImage.read will return 0, so try to load as DDS
-            myTexture.readDds(StringStream(image_data))
+            success = myTexture.readDds(StringStream(image_data))
+            
+        if success == 0:
+            return None
             
         return myTexture
     else:
