@@ -221,10 +221,18 @@ def getNodeFromGeom(prim):
 def getTexture(value):
     image_data = value.sampler.surface.image.data
     if image_data:
-        myImage = PNMImage()
-        myImage.read(StringStream(image_data), posixpath.basename(value.sampler.surface.image.path))
         myTexture = Texture(value.sampler.surface.image.id)
-        myTexture.load(myImage)
+        
+        myImage = PNMImage()
+        success = myImage.read(StringStream(image_data), posixpath.basename(value.sampler.surface.image.path))
+        
+        if success == 1:
+            #PNMImage can handle most texture formats
+            myTexture.load(myImage)
+        else:
+            #Except for DDS, which PNMImage.read will return 0, so try to load as DDS
+            myTexture.readDds(StringStream(image_data))
+            
         return myTexture
     else:
         return None
@@ -357,15 +365,16 @@ def getBaseNodePath(render):
     return render.attachNewNode(globNode)
 
 def ensureCameraAt(nodePath, cam):
-    boundingSphere = nodePath.getBounds()
-    scale = 5.0 / boundingSphere.getRadius()
-    
-    nodePath.setScale(scale, scale, scale)
-    boundingSphere = nodePath.getBounds()
-    nodePath.setPos(-1 * boundingSphere.getCenter().getX(),
-                    -1 * boundingSphere.getCenter().getY(),
-                    -1 * boundingSphere.getCenter().getZ())
-    nodePath.setHpr(0,0,0)
+    if nodePath.getNumChildren() > 0:
+        boundingSphere = nodePath.getBounds()
+        scale = 5.0 / boundingSphere.getRadius()
+        
+        nodePath.setScale(scale, scale, scale)
+        boundingSphere = nodePath.getBounds()
+        nodePath.setPos(-1 * boundingSphere.getCenter().getX(),
+                        -1 * boundingSphere.getCenter().getY(),
+                        -1 * boundingSphere.getCenter().getZ())
+        nodePath.setHpr(0,0,0)
        
     cam.setPos(15, -15, 0)
     cam.lookAt(0.0, 0.0, 0.0)
