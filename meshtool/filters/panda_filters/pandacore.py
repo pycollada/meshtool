@@ -244,9 +244,9 @@ def getStateFromMaterial(prim_material):
     state = RenderState.makeFullDefault()
     
     mat = Material()
+    texattr = TextureAttrib.makeAllOff()
     
     if prim_material and prim_material.effect:
-        texattr = TextureAttrib.makeAllOff()
         for prop in prim_material.effect.supported:
             value = getattr(prim_material.effect, prop)
             if value is None:
