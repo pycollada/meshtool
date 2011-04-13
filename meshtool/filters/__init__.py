@@ -23,4 +23,5 @@ registerModule('meshtool.filters.print_filters.print_json')
 #Save filters last
 registerModule('meshtool.filters.panda_filters.save_screenshot')
 registerModule('meshtool.filters.panda_filters.save_rotate_screenshots')
+registerModule('meshtool.filters.atlas_filters.make_atlas')
 registerModule('meshtool.filters.save_filters.save_collada')
