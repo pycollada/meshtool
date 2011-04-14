@@ -136,15 +136,18 @@ def getVertexData(vertex, vertex_index, normal=None, normal_index=None, texcoord
         vertex_data = vertex[vertex_index]
         vertex_data.shape = (-1, 3)
         stacked = vertex_data
+        vertex_data = None
         if normal is not None:
             normal_data = normal[normal_index]
             normal_data.shape = (-1, 3)
             collada.util.normalize_v3(normal_data)
             stacked = numpy.hstack((stacked, normal_data))
+            normal_data = None
         if len(texcoordset) > 0:
             texcoord_data = texcoordset[0][texcoord_indexset[0]]
             texcoord_data.shape = (-1, 2)
             stacked = numpy.hstack((stacked, texcoord_data))
+            texcoord_data = None
 
         if normal is None and len(texcoordset) == 0:
             format = GeomVertexFormat.getV3() #just vertices
@@ -165,12 +168,16 @@ def getVertexData(vertex, vertex_index, normal=None, normal_index=None, texcoord
         stacked.shape = (-1)
         assert(stacked.dtype == numpy.float32)
         all_data = stacked.tostring()
+        stacked = None
 
         vdata = GeomVertexData("dataname", format, Geom.UHStatic)
         arr = GeomVertexArrayData(vdata.getArray(0).getArrayFormat(), GeomEnums.UHStream)
         datahandle = arr.modifyHandle()
         datahandle.setData(all_data)
+        all_data = None
         vdata.setArray(0, arr)
+        datahandle = None
+        arr = None
         
         return vdata
 
