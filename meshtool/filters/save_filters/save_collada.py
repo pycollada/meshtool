@@ -9,7 +9,6 @@ def FilterGenerator():
         def apply(self, mesh, filename):
             if os.path.exists(filename):
                 raise FilterException("specified filename already exists")
-            print "SAVING FILE"
             mesh.write(filename)
             return mesh
     return ColladaSaveFilter()
