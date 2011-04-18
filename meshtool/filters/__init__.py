@@ -20,6 +20,7 @@ registerModule('meshtool.filters.print_filters.print_textures')
 registerModule('meshtool.filters.panda_filters.viewer')
 registerModule('meshtool.filters.print_filters.print_json')
 registerModule('meshtool.filters.optimize_filters.combine_effects')
+registerModule('meshtool.filters.optimize_filters.strip_lines')
 
 #Save filters last
 registerModule('meshtool.filters.panda_filters.save_screenshot')
