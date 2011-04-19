@@ -42,7 +42,7 @@ def getJSON(mesh):
 def FilterGenerator():
     class PrintJsonFilter(OpFilter):
         def __init__(self):
-            super(PrintJsonFilter, self).__init__('print_json', 'Prints a bunch of information aobut the mesh in a JSON format')
+            super(PrintJsonFilter, self).__init__('print_json', 'Prints a bunch of information about the mesh in a JSON format')
         def apply(self, mesh):
             print getJSON(mesh)
             return mesh

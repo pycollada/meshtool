@@ -8,17 +8,36 @@ INSTALLATION
 
 FILTER LIST
 ===========
+
+Load
+----
 * ``--load_collada file`` - Loads a collada file
+
+Save
+----
 * ``--save_collada file`` - Saves a collada file
+
+Print
+-----
+* ``--print_info`` - Prints a bunch of information about the mesh to the console
+* ``--print_json`` - Prints a bunch of information about the mesh in a JSON format
 * ``--print_textures`` - Prints a list of the embedded images in the mesh
+
+View
+----
+* ``--viewer`` - Uses panda3d to bring up a viewer - depends on [Panda3d](http://www.panda3d.org/)
+
+Screenshots
+-----------
+* ``--save_screenshot file`` - Saves a screenshot of the rendered collada file - depends on [Panda3d](http://www.panda3d.org/)
+* ``--save_rotate_screenshots file N W H`` - Saves N screenshots of size WxH, rotating evenly spaced around the object between shots. Each screenshot file will be file.n.png - depends on [Panda3d](http://www.panda3d.org/)
+
+Mesh Operations
+---------------
 * ``--combine_effects`` - Combines identical effects
 * ``--strip_lines`` - Strips any lines from the document
 * ``--triangulate`` - Replaces any polylist or polygons with triangles
 * ``--generate_normals`` - Generates normals for any triangle sets that don't have any
-* ``--save_screenshot file`` - Saves a screenshot of the rendered collada file - depends on [Panda3d](http://www.panda3d.org/)
-* ``--save_rotate_screenshots file N W H`` - Saves N screenshots of size WxH, rotating evenly spaced around the object between shots. Each screenshot file will be file.n.png - depends on [Panda3d](http://www.panda3d.org/)
-* ``--viewer`` - Uses panda3d to bring up a viewer - depends on [Panda3d](http://www.panda3d.org/)
-* ``--print_json`` - Prints a bunch of information aobut the mesh in a JSON format
 
 EXAMPLES
 ========
