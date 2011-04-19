@@ -3,8 +3,10 @@ from numpy import array
 import copy
 import heapq
 import math
+from .progress_printer import ProgressPrinter
 
-def quadricForTriangle(triangle):
+def quadricForTriangle(triangle, progress):
+    progress.step()
     a,b,c = triangle
     normal = numpy.cross(b - a, c - a)
     normal = normal / numpy.linalg.norm(normal)
@@ -40,23 +42,34 @@ class MeshSimplification:
     # contractions: array of lists of contractions that a vertex appears in
 
     def __init__(self, vertices, triangles):
+        print "Copying..."
         self.vertices = [copy.copy(vertex) for vertex in vertices]
         self.triangles = [copy.copy(triangle) for triangle in triangles]
         self.adj = [{} for i in range(len(vertices))]
+        print "Building simplex..."
+        progress = ProgressPrinter(len(triangles))
         for i in range(len(triangles)):
+            progress.step()
             (a,b,c) = triangles[i]
             self.adj[a][i] = 0
             self.adj[b][i] = 1
             self.adj[c][i] = 2
-        self.tri_quadrics = [quadricForTriangle(triangle)
+        print "Generating triangle quadrics..."
+        progress = ProgressPrinter(len(triangles))
+        self.tri_quadrics = [quadricForTriangle(triangle, progress)
                              for triangle in vertices[triangles]]
-        self.quadrics = [self.vertexQuadric(i) for i in range(len(vertices))]
+        print "Computing vertex quadrics..."
+        progress = ProgressPrinter(len(vertices))
+        self.quadrics = [self.vertexQuadric(i, progress) for i in range(len(vertices))]
         del self.tri_quadrics # Not needed anymore
         self.heap = []
         self.numContr = 0
         self.contractions = [{} for i in range(len(vertices))]
         self.contractionsByVertices = {}
+        print "Generating contractions..."
+        progress = ProgressPrinter(len(triangles))
         for i in range(len(triangles)):
+            progress.step()
             (a,b,c) = triangles[i]
             for x in [(a,b),(a,c),(b,c)]:
                 self.genContraction(x[0], x[1])
@@ -74,7 +87,8 @@ class MeshSimplification:
 
     # Compute the quadric associated with a vertex during the initialization
     # phase.
-    def vertexQuadric(self, i):
+    def vertexQuadric(self, i, progress):
+        progress.step()
         A = numpy.zeros((3,3))
         b = numpy.zeros((1,3))
         c = 0
