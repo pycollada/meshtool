@@ -14,16 +14,17 @@ def quadricForTriangle(triangle, progress):
     s2 = numpy.linalg.norm(c-a)
     s3 = numpy.linalg.norm(c-b)
     sp = (s1+s2+s3)/2.0
-    area = math.sqrt(sp*(sp-s1)*(sp-s2)*(sp-s3))
+    area2 = sp*(sp-s1)*(sp-s2)*(sp-s3)
+    if area2 <= 0:
+        area = 0 # Floating point error can sometimes cause this
+    else:
+        area = math.sqrt(area2)
     d = -numpy.dot(normal, a)
     return (area*numpy.outer(normal, normal), area*d*normal, area*d*d)
     
 
 def evalQuadric(A, b, c, pt):
-    val = numpy.dot(pt,numpy.inner(A,pt)) + 2*numpy.dot(b,pt) + c
-    if val < -1:
-        raise Exception
-    return val
+    return numpy.dot(pt,numpy.inner(A,pt)) + 2*numpy.dot(b,pt) + c
 
 class MeshSimplification:
 
@@ -96,9 +97,9 @@ class MeshSimplification:
         c = 0
         for tri_index in self.adj[i]:
             A2, b2, c2 = self.tri_quadrics[tri_index]
-            A += A2/3
-            b += b2/3
-            c += c2/3
+            A += A2/3.0
+            b += b2/3.0
+            c += c2/3.0
         return [A,b,c]
 
     def genContraction(self, i1, i2):
@@ -123,8 +124,6 @@ class MeshSimplification:
 
     def doContraction(self, contr):
         err, id, i1, i2, valid = contr
-
-        # print "Contracting",i1,"and",i2,"...",err
 
         for i in range(3):
             self.quadrics[i1][i] += self.quadrics[i2][i]
