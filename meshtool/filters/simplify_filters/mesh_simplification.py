@@ -20,8 +20,7 @@ def quadricForTriangle(triangle, progress):
     else:
         area = math.sqrt(area2)
     d = -numpy.dot(normal, a)
-    return (area*numpy.outer(normal, normal), area*d*normal, area*d*d)
-    
+    return (area*numpy.outer(normal, normal), area*d*normal, area*d*d, area, normal)    
 
 def evalQuadric(A, b, c, pt):
     return numpy.dot(pt,numpy.inner(A,pt)) + 2*numpy.dot(b,pt) + c
@@ -49,11 +48,18 @@ class MeshSimplification:
         self.corner_attributes = [[copy.copy(triangle) for triangle in attr_list]
                                   for attr_list in corner_attributes]
         self.adj = [{} for i in range(len(vertices))]
+        self.adj_edge = {}
         print "Building simplex..."
         progress = ProgressPrinter(len(triangles))
         for i in range(len(triangles)):
             progress.step()
             (a,b,c) = triangles[i]
+            for x in [(a,b,c),(a,c,b),(b,c,a)]:
+                x1, x2, x3 = x
+                if x1 > x2: x1, x2 = x2, x1
+                if (x1, x2) not in self.adj_edge:
+                    self.adj_edge[(x1, x2)] = []
+                self.adj_edge[(x1, x2)].append(x3)
             self.adj[a][i] = 0
             self.adj[b][i] = 1
             self.adj[c][i] = 2
@@ -61,10 +67,12 @@ class MeshSimplification:
         progress = ProgressPrinter(len(triangles))
         self.tri_quadrics = [quadricForTriangle(triangle, progress)
                              for triangle in vertices[triangles]]
+        self.avg_area = numpy.mean([x[3] for x in self.tri_quadrics])
         print "Computing vertex quadrics..."
         progress = ProgressPrinter(len(vertices))
         self.quadrics = [self.vertexQuadric(i, progress) for i in range(len(vertices))]
         del self.tri_quadrics # Not needed anymore
+        del self.adj_edge     # Not needed anymore
         self.heap = []
         self.numContr = 0
         self.contractions = [{} for i in range(len(vertices))]
@@ -96,7 +104,21 @@ class MeshSimplification:
         b = numpy.zeros((1,3))
         c = 0
         for tri_index in self.adj[i]:
-            A2, b2, c2 = self.tri_quadrics[tri_index]
+            A2, b2, c2, area, normal = self.tri_quadrics[tri_index]
+            for i2 in self.triangles[tri_index]:
+                if i2 == i: continue
+                x1, x2 = min(i2, i), max(i2, i)
+                if len(self.adj_edge[(x1, x2)]) == 1:
+                    v = self.vertices[i] - self.vertices[i2]
+                    normal2 = numpy.cross(v, normal)
+                    normal2 = normal2 / numpy.linalg.norm(normal2)
+                    d = -numpy.dot(normal, self.vertices[i])
+                    A3 = 3*self.avg_area*numpy.outer(normal2, normal2)
+                    b3 = 3*self.avg_area*d*normal2
+                    c3 = 3*self.avg_area*d*d
+                    A += A3
+                    b += b3
+                    c += c3
             A += A2/3.0
             b += b2/3.0
             c += c2/3.0
