@@ -41,10 +41,12 @@ class MeshSimplification:
     #
     # contractions: array of lists of contractions that a vertex appears in
 
-    def __init__(self, vertices, triangles):
+    def __init__(self, vertices, triangles, corner_attributes=[]):
         print "Copying..."
         self.vertices = [copy.copy(vertex) for vertex in vertices]
         self.triangles = [copy.copy(triangle) for triangle in triangles]
+        self.corner_attributes = [[copy.copy(triangle) for triangle in attr_list]
+                                  for attr_list in corner_attributes]
         self.adj = [{} for i in range(len(vertices))]
         print "Building simplex..."
         progress = ProgressPrinter(len(triangles))
@@ -218,6 +220,8 @@ class MeshSimplification:
         for i in self.triangles[last]:
             del self.adj[i][last]
         self.triangles.pop()
+        for attr_list in self.corner_attributes:
+            attr_list.pop()
 
     def swapTriangles(self, i1, i2):
         if i1 == i2: return
@@ -232,3 +236,5 @@ class MeshSimplification:
                 self.adj[i][i1] = self.adj[i][i2]
                 del self.adj[i][i2]
         self.triangles[i1], self.triangles[i2] = self.triangles[i2], self.triangles[i1]
+        for attr_list in self.corner_attributes:
+            attr_list[i1], attr_list[i2] = attr_list[i2], attr_list[i1]
