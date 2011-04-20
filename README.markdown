@@ -39,6 +39,10 @@ Mesh Operations
 * ``--triangulate`` - Replaces any polylist or polygons with triangles
 * ``--generate_normals`` - Generates normals for any triangle sets that don't have any
 
+Texture Operations
+------------------
+* ``--save_mipmaps`` - Saves mipmaps to disk in concatenated PNG format in the same location as textures but with an added .mipmap
+
 EXAMPLES
 ========
     $ ./meshtool-cli --load_collada duck.dae --print_textures
