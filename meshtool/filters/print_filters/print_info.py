@@ -12,6 +12,10 @@ def printMeshInfo(mesh):
     for light in mesh.lights:
         print indent, light
         
+    print 'Materials: %d' % len(mesh.materials)
+    for material in mesh.materials:
+        print indent, material
+        
     print 'Effects: %d' % len(mesh.effects)
     for effect in mesh.effects:
         print indent, effect

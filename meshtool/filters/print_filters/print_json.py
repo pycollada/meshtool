@@ -15,6 +15,10 @@ def getJSON(mesh):
     for light in mesh.lights:
         lights.append({'id':light.id, 'type': type(light).__name__})
         
+    materials = []
+    for material in mesh.materials:
+        materials.append({'id':material.id, 'effect':material.effect.id})
+        
     effects = []
     for effect in mesh.effects:
         effects.append({'id':effect.id, 'type':effect.shadingtype})
@@ -34,6 +38,7 @@ def getJSON(mesh):
         
     json_ret = {'cameras': cameras,
                 'lights': lights,
+                'materials': materials,
                 'effects': effects,
                 'images': images,
                 'primitives': primitives}
