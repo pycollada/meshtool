@@ -35,6 +35,8 @@ Screenshots
 Mesh Operations
 ---------------
 * ``--combine_effects`` - Combines identical effects
+* ``--combine_materials`` - Combines identical materials
+* ``--combine_primitives`` - Combines primitives within a geometry if they have the same sources and scene material mapping (triangle sets only)
 * ``--strip_lines`` - Strips any lines from the document
 * ``--triangulate`` - Replaces any polylist or polygons with triangles
 * ``--generate_normals`` - Generates normals for any triangle sets that don't have any
