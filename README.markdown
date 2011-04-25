@@ -43,7 +43,7 @@ Mesh Operations
 
 Texture Operations
 ------------------
-* ``--save_mipmaps`` - Saves mipmaps to disk in concatenated PNG format in the same location as textures but with an added .mipmap
+* ``--save_mipmaps`` - Saves mipmaps to disk in tar format in the same location as textures but with an added .tar. The archive will contain PNG or JPG images depending on source file. DDS support depends on [Panda3d](http://www.panda3d.org/)
 
 EXAMPLES
 ========
