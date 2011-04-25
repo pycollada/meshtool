@@ -7,7 +7,7 @@ def generateNormals(mesh):
     for geom in mesh.geometries:
         prims_by_src = {}
         for prim in geom.primitives:
-            if type(prim) is collada.triangleset.TriangleSet and prim.normal is None:
+            if type(prim) is collada.triangleset.TriangleSet: # and prim.normal is None:
                 vertex_source = prim.sources['VERTEX'][0][2]
                 if vertex_source in prims_by_src:
                     prims_by_src[vertex_source].append(prim)
@@ -16,7 +16,6 @@ def generateNormals(mesh):
 
         for srcid, primlist in prims_by_src.iteritems():
             vertex = geom.sourceById[srcid[1:]].data
-            norms = numpy.zeros( vertex.shape, dtype=vertex.dtype )
             
             #combine all of the vertex indices for each primitive to one array
             concat_arrays = []
@@ -29,16 +28,39 @@ def generateNormals(mesh):
             #calculate the per-face normals and apply each equally to the vertices
             n = numpy.cross( tris[::,1] - tris[::,0], tris[::,2] - tris[::,0] )
             collada.util.normalize_v3(n)
-            norms[ combined_index[:,0] ] += n
-            norms[ combined_index[:,1] ] += n
-            norms[ combined_index[:,2] ] += n
-            collada.util.normalize_v3(norms)
+            
+            faceted_norms = numpy.zeros( vertex.shape, dtype=vertex.dtype )
+            faceted_norms[ combined_index[:,0] ] += n
+            faceted_norms[ combined_index[:,1] ] += n
+            faceted_norms[ combined_index[:,2] ] += n
+            collada.util.normalize_v3(faceted_norms)
+            print "yeah"
+
+            #smoothed_norms = numpy.zeros( vertex.shape, dtype=vertex.dtype )
+            #no_add = numpy.zeros( n.shape, dtype=n.dtype )
+
+            #angle_between0 = numpy.array(map(lambda x: numpy.dot(*x), zip(faceted_norms[ combined_index[:,0] ], n)))
+            #angle_between1 = numpy.array(map(lambda x: numpy.dot(*x), zip(faceted_norms[ combined_index[:,1] ], n)))
+            #angle_between2 = numpy.array(map(lambda x: numpy.dot(*x), zip(faceted_norms[ combined_index[:,2] ], n)))
+            
+            #angle = 0.01
+            #angle_between0 = angle_between0 > angle
+            #angle_between0 = numpy.vstack((angle_between0, angle_between0, angle_between0))
+            #angle_between1 = angle_between1 > angle
+            #angle_between1 = numpy.vstack((angle_between1, angle_between1, angle_between1))
+            #angle_between2 = angle_between2 > angle
+            #angle_between2 = numpy.vstack((angle_between2, angle_between2, angle_between2))
+            #smoothed_norms[ combined_index[:,0] ] += numpy.where(angle_between0.T, n, no_add)
+            #smoothed_norms[ combined_index[:,1] ] += numpy.where(angle_between1.T, n, no_add)
+            #smoothed_norms[ combined_index[:,2] ] += numpy.where(angle_between2.T, n, no_add)
+            #collada.util.normalize_v3(smoothed_norms)
+            
 
             #now let's create a source for this new normal data and add it
             unique_src = srcid[1:] + '-normals'
             while unique_src in geom.sourceById:
                 unique_src += '-x'
-            normal_src = collada.source.FloatSource(unique_src, norms, ('X', 'Y', 'Z'))
+            normal_src = collada.source.FloatSource(unique_src, faceted_norms, ('X', 'Y', 'Z'))
             geom.sourceById[normal_src.id] = normal_src
             
             for prim in primlist:
