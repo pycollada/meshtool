@@ -137,14 +137,19 @@ class MeshSimplification:
                                  for i in rec.changed_triangles]
             new_triangles_opp_v = [new_v_indices[i]
                                    for i in rec.deleted_triangles_opp_v]
+            new_triangles_flip = []
             new_triangles_attr = [[] for x in self.original_attributes]
             for j in range(len(rec.deleted_triangles_perm)):
                 i1, i2, i3 = rec.deleted_triangles_perm[j]
+                flip = (i1,i2,i3) in [(0,2,1),(2,1,0),(1,0,2)]
+                new_triangles_flip.append(flip)
                 tri_index = rec.deleted_triangles[j]
                 for k in range(len(new_triangles_attr)):
                     attr_orig = self.original_attributes[k][tri_index]
                     attr_cur = []
-                    for ind in (i1, i2, i3):
+                    if flip: ord = (i2, i1, i3)
+                    else: ord = (i1, i2, i3)
+                    for ind in ord:
                         a = attr_orig[ind]
                         cur_i = new_a_indices[k][a]
                         if cur_i == -1:
@@ -156,7 +161,8 @@ class MeshSimplification:
                             attr_cur.append(cur_i)
                     new_triangles_attr[k].append(attr_cur)
             pm.append((split_index, coords, changed_triangles,
-                       new_triangles_opp_v, new_triangles_attr))
+                       new_triangles_opp_v, new_triangles_flip,
+                       new_triangles_attr))
             new_v_indices[rec.source] = num_v
             num_v += 1
             for tri_i in rec.deleted_triangles:

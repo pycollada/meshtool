@@ -6,6 +6,8 @@ import numpy
 from .mesh_simplification import MeshSimplification
 from .progress_printer import ProgressPrinter
 import collada
+import pickle
+from .util import geomReplacePrimitive
 
 def getSourceIdOrCreate(geom, source, new_id, components):
     for id in geom.sourceById:
@@ -22,7 +24,9 @@ def FilterGenerator():
                 'simplify', 'Simplifies a collada file')
             self.arguments.append(FilterArgument(
                     'percent', 'Percentage of vertices to simplify to (0-100)'))
-        def apply(self, mesh, percent):
+            self.arguments.append(FileArgument(
+                    'filename', 'Where to save the progressive mesh'))
+        def apply(self, mesh, percent, filename):
             geom = mesh.geometries[0]
             prim = geom.primitives[0]
             if not isinstance(prim, collada.triangleset.TriangleSet):
@@ -53,65 +57,11 @@ def FilterGenerator():
                 s.contractOnce()
                 # if not s.isValid(): raise Exception
             print "Creating new primitive..."
-            il = collada.source.InputList()
-            new_id = geom.id+"-vertex"
-            while new_id in geom.sourceById:
-                new_id += "-x"
-            vertexsource = collada.source.FloatSource(
-                new_id, numpy.array(s.vertices), ('X', 'Y', 'Z'))
-            geom.sourceById[new_id] = vertexsource
-            offset = 0
-            il.addInput(offset, "VERTEX", "#"+new_id)
-            offset += 1
-            last = len(s.attributes) - 1
-            if prim.normal is not None:
-                new_id = geom.id+"-normal"
-                while new_id in geom.sourceById:
-                    new_id += "-x"
-                normalsource = collada.source.FloatSource(
-                    new_id, numpy.array(s.attribute_sources[last]),
-                    ('X', 'Y', 'Z'))
-                geom.sourceById[new_id] = normalsource
-                il.addInput(offset, "NORMAL", "#"+new_id)
-                offset += 1
-            if prim.texcoordset is not None:
-                texcoord_indexset = []
-                for i in range(last):
-                    new_id = geom.id+"-texcoord"+str(i)
-                    while new_id in geom.sourceById:
-                        new_id += "-x"
-                    texcoordsource = collada.source.FloatSource(
-                        new_id, numpy.array(s.attribute_sources[i]),
-                        ('S', 'T'))
-                    geom.sourceById[new_id] = texcoordsource
-                    il.addInput(offset, "TEXCOORD", "#"+new_id)
-                    offset += 1
-                    texcoord_indexset.append(numpy.array(s.attributes[i]))
-            indices = numpy.array(s.triangles)
-            indices.shape = (-1,3,1)
-            if prim.normal is not None:
-                normal_index = numpy.array(s.attributes[last])
-                normal_index.shape = (-1,3,1)
-                indices = numpy.append(indices, normal_index, 2)
-            if prim.texcoordset is not None:
-                for texcoord_index in texcoord_indexset:
-                    texcoord_index.shape = (-1,3,1)
-                    indices = numpy.append(indices, texcoord_index, 2)
-            new_prim = geom.createTriangleSet(indices.flatten(), il, prim.material)
-            geom.primitives[0] = new_prim
-
-            # Clean up unused sources
-            referenced_sources = {}
-            for prim in geom.primitives:
-                for semantic in prim.sources:
-                    for input in prim.sources[semantic]:
-                        referenced_sources[input[2][1:]] = True
-            unreferenced_sources = []
-            for id in geom.sourceById:
-                if id not in referenced_sources:
-                    unreferenced_sources.append(id)
-            for id in unreferenced_sources:
-                del geom.sourceById[id]
+            geomReplacePrimitive(geom, 0, s.vertices, s.triangles, s.attributes,
+                                 s.attribute_sources)
+            print "Generating progressive mesh..."
+            pm = s.generatePM()
+            pickle.dump(pm, open(filename, "wb"))
             print "Done."
             return mesh
     return ColladaSimplifyFilter()
