@@ -4,23 +4,41 @@ import copy
 import heapq
 import math
 from .progress_printer import ProgressPrinter
+import collada
 
-def quadricForTriangle(triangle, progress):
-    progress.step()
-    a,b,c = triangle
-    normal = numpy.cross(b - a, c - a)
-    normal = normal / numpy.linalg.norm(normal)
-    s1 = numpy.linalg.norm(b-a)
-    s2 = numpy.linalg.norm(c-a)
-    s3 = numpy.linalg.norm(c-b)
-    sp = (s1+s2+s3)/2.0
-    area2 = sp*(sp-s1)*(sp-s2)*(sp-s3)
-    if area2 <= 0:
-        area = 0 # Floating point error can sometimes cause this
-    else:
-        area = math.sqrt(area2)
-    d = -numpy.dot(normal, a)
-    return (area*numpy.outer(normal, normal), area*d*normal, area*d*d, area, normal)    
+def array_mult(arr1, arr2):
+    return arr1[:,0]*arr2[:,0] + arr1[:,1]*arr2[:,1] + arr2[:,2]*arr1[:,2]
+def array_dot(arr1, arr2):
+    return numpy.sqrt( array_mult(arr1, arr2) )
+
+def quadricsForTriangles(tris):
+    normal = numpy.cross( tris[::,1] - tris[::,0], tris[::,2] - tris[::,0] )
+    collada.util.normalize_v3(normal)
+    
+    s1 = tris[::,1] - tris[::,0]
+    s1 = array_dot(s1, s1)
+    s2 = tris[::,2] - tris[::,0]
+    s2 = array_dot(s2, s2)
+    s3 = tris[::,2] - tris[::,1]
+    s3 = array_dot(s3, s3)
+    
+    sp = (s1 + s2 + s3) / 2.0
+    area = sp*(sp-s1)*(sp-s2)*(sp-s3)
+    area_zeros = numpy.zeros(area.shape, area.dtype)
+    area = numpy.where(area < 0, area_zeros, numpy.sqrt(area))
+    area_zeros = None
+    
+    d = -array_mult(normal, tris[:,0])
+
+    b2 = normal * (area*d)[:,numpy.newaxis]
+    c2 = area*d*d
+    
+    A2 = numpy.dstack((normal[:,0][:,numpy.newaxis] * normal,
+                       normal[:,1][:,numpy.newaxis] * normal,
+                       normal[:,2][:,numpy.newaxis] * normal))
+    A2 = area[:,numpy.newaxis,numpy.newaxis] * A2
+    
+    return (A2, b2, c2, area, normal)
 
 def evalQuadric(A, b, c, pt):
     return numpy.dot(pt,numpy.inner(A,pt)) + 2*numpy.dot(b,pt) + c
@@ -92,9 +110,10 @@ class MeshSimplification:
 
         print "Generating triangle quadrics..."
         progress = ProgressPrinter(len(triangles))
-        self.tri_quadrics = [quadricForTriangle(triangle, progress)
-                             for triangle in vertices[triangles]]
-        self.avg_area = numpy.mean([x[3] for x in self.tri_quadrics])
+        
+        self.tri_quadrics = quadricsForTriangles(vertices[triangles])
+        self.avg_area = numpy.mean(self.tri_quadrics[3])
+        
         print "Computing vertex quadrics..."
         progress = ProgressPrinter(len(vertices))
         self.quadrics = [self.vertexQuadric(i, progress) for i in range(len(vertices))]
@@ -189,7 +208,7 @@ class MeshSimplification:
         b = numpy.zeros((1,3))
         c = 0
         for tri_index in self.adj[i]:
-            A2, b2, c2, area, normal = self.tri_quadrics[tri_index]
+            A2, b2, c2, area, normal = (self.tri_quadrics[ii][tri_index] for ii in range(5))
             for i2 in self.triangles[tri_index]:
                 if i2 == i: continue
                 x1, x2 = min(i2, i), max(i2, i)
