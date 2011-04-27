@@ -26,7 +26,7 @@ registerModule('meshtool.filters.optimize_filters.combine_primitives')
 registerModule('meshtool.filters.optimize_filters.strip_lines')
 registerModule('meshtool.filters.optimize_filters.triangulate')
 registerModule('meshtool.filters.optimize_filters.generate_normals')
-registerModule('meshtool.filters.panda_filters.save_mipmaps')
+registerModule('meshtool.filters.optimize_filters.save_mipmaps')
 registerModule('meshtool.filters.simplify_filters.simplify')
 registerModule('meshtool.filters.simplify_filters.load_pm')
 
