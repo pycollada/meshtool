@@ -3,9 +3,10 @@ import numpy
 
 def geomReplacePrimitive(geom, prim_index, vertices, triangles, attributes,
                          attribute_sources):
+    base_id = geom.id+"-"+str(prim_index)
     il = collada.source.InputList()
     prim = geom.primitives[prim_index]
-    new_id = geom.id+"-vertex"
+    new_id = base_id+"-vertex"
     while new_id in geom.sourceById: new_id += "-x"
     vertexsource = collada.source.FloatSource(
         new_id, numpy.array(vertices), ('X', 'Y', 'Z'))
@@ -15,7 +16,7 @@ def geomReplacePrimitive(geom, prim_index, vertices, triangles, attributes,
     offset += 1
     last = len(attributes) - 1
     if prim.normal is not None:
-        new_id = geom.id+"-normal"
+        new_id = base_id+"-normal"
         while new_id in geom.sourceById: new_id += "-x"
         normalsource = collada.source.FloatSource(
             new_id, numpy.array(attribute_sources[last]),
@@ -26,7 +27,7 @@ def geomReplacePrimitive(geom, prim_index, vertices, triangles, attributes,
         if prim.texcoordset is not None:
             texcoord_indexset = []
             for i in range(last):
-                new_id = geom.id+"-texcoord"+str(i)
+                new_id = base_id+"-texcoord"+str(i)
                 while new_id in geom.sourceById: new_id += "-x"
                 texcoordsource = collada.source.FloatSource(
                     new_id, numpy.array(attribute_sources[i]),

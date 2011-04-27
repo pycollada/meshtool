@@ -5,6 +5,7 @@ import heapq
 import math
 from .progress_printer import ProgressPrinter
 import collada
+import pprint
 
 def array_mult(arr1, arr2):
     return arr1[:,0]*arr2[:,0] + arr1[:,1]*arr2[:,1] + arr2[:,2]*arr1[:,2]
@@ -45,6 +46,7 @@ def evalQuadric(A, b, c, pt):
 
 class ContractionRecord:
     # Contains:
+    # key - the key of the simplifier that created this record
     # source - index of vertex that is deleted
     # target - index of vertex that is contracted to
     # deleted_triangles - list of deleted triangles (by index)
@@ -54,9 +56,10 @@ class ContractionRecord:
     #                          (0,1,2), indicating which of the three corners
     #                          is the source, the target, and the opposite corner.
     # changed_triangles - list of changed triangles (by index)
-    def __init__(self, source, target, deleted_triangles,
+    def __init__(self, key, source, target, deleted_triangles,
                  deleted_triangles_opp_v, deleted_triangles_perm,
                  changed_triangles):
+        self.key = key
         self.source = source
         self.target = target
         self.deleted_triangles = deleted_triangles
@@ -66,16 +69,17 @@ class ContractionRecord:
 
 class MeshSimplification:
 
-    def __init__(self, vertices, triangles, attributes=[],
+    def __init__(self, key, heap, history, vertices, triangles, attributes=[],
                  attribute_sources=[]):
         print "Copying..."
+        self.key = key
         self.original_vertices = vertices
         self.original_triangles = triangles
         self.original_attributes = attributes
         self.original_attribute_sources = attribute_sources
         self.vertices = [vertex for vertex in vertices]
         self.vertex_indices = range(len(vertices))
-        self.history = []
+        self.history = history
         self.triangles = [copy.copy(triangle) for triangle in triangles]
         self.triangle_indices = range(len(triangles))
         self.attributes = [[copy.copy(triangle) for triangle in attr_list]
@@ -119,7 +123,7 @@ class MeshSimplification:
         self.quadrics = [self.vertexQuadric(i, progress) for i in range(len(vertices))]
         del self.tri_quadrics # Not needed anymore
         del self.adj_edge     # Not needed anymore
-        self.heap = []
+        self.heap = heap
         self.numContr = 0
         self.contractions = [{} for i in range(len(vertices))]
         self.contractionsByVertices = {}
@@ -131,74 +135,63 @@ class MeshSimplification:
             for x in [(a,b),(a,c),(b,c)]:
                 self.genContraction(x[0], x[1])
 
-    def generatePM(self):
-        pm = []
-        new_v_indices = [-1 for v in self.original_vertices]
-        num_v = len(self.vertex_indices)
-        for i in range(num_v):
-            new_v_indices[self.vertex_indices[i]] = i
-        new_t_indices = [-1 for t in self.original_triangles]
-        num_t = len(self.triangle_indices)
-        for i in range(num_t):
-            new_t_indices[self.triangle_indices[i]] = i
-        new_a_indices = [[-1 for a in attr_list]
-                         for attr_list in self.original_attribute_sources]
-        num_a = [len(attr_list) for attr_list in self.attribute_indices]
+    def startPM(self, pm):
+        self.pm = pm
+        self.new_v_indices = [-1 for v in self.original_vertices]
+        self.num_v = len(self.vertex_indices)
+        for i in range(self.num_v):
+            self.new_v_indices[self.vertex_indices[i]] = i
+        self.new_t_indices = [-1 for t in self.original_triangles]
+        self.num_t = len(self.triangle_indices)
+        for i in range(self.num_t):
+            self.new_t_indices[self.triangle_indices[i]] = i
+        self.new_a_indices = [[-1 for a in attr_list]
+                              for attr_list in self.original_attribute_sources]
+        self.num_a = [len(attr_list) for attr_list in self.attribute_indices]
         for attr_id in range(len(self.attribute_indices)):
             for i in range(len(self.attribute_indices[attr_id])):
-                new_a_indices[attr_id][self.attribute_indices[attr_id][i]] = i
-        for i in range(len(self.history) - 1, -1, -1):
-            rec = self.history[i]
-            coords = self.original_vertices[rec.source]
-            split_index = new_v_indices[rec.target]
-            if split_index == -1: raise Exception
-            changed_triangles = [new_t_indices[i]
-                                 for i in rec.changed_triangles]
-            new_triangles_opp_v = [new_v_indices[i]
-                                   for i in rec.deleted_triangles_opp_v]
-            new_triangles_flip = []
-            new_triangles_attr = [[] for x in self.original_attributes]
-            for j in range(len(rec.deleted_triangles_perm)):
-                i1, i2, i3 = rec.deleted_triangles_perm[j]
-                flip = (i1,i2,i3) in [(0,2,1),(2,1,0),(1,0,2)]
-                new_triangles_flip.append(flip)
-                tri_index = rec.deleted_triangles[j]
-                for k in range(len(new_triangles_attr)):
-                    attr_orig = self.original_attributes[k][tri_index]
-                    attr_cur = []
-                    if flip: ord = (i2, i1, i3)
-                    else: ord = (i1, i2, i3)
-                    for ind in ord:
-                        a = attr_orig[ind]
-                        cur_i = new_a_indices[k][a]
-                        if cur_i == -1:
-                            attr_cur.append(
-                                self.original_attribute_sources[k][a])
-                            new_a_indices[k][a] = num_a[k]
-                            num_a[k] += 1
-                        else:
-                            attr_cur.append(cur_i)
-                    new_triangles_attr[k].append(attr_cur)
-            pm.append((split_index, coords, changed_triangles,
-                       new_triangles_opp_v, new_triangles_flip,
-                       new_triangles_attr))
-            new_v_indices[rec.source] = num_v
-            num_v += 1
-            for tri_i in rec.deleted_triangles:
-                new_t_indices[tri_i] = num_t
-                num_t += 1
-        return pm
+                self.new_a_indices[attr_id][
+                    self.attribute_indices[attr_id][i]] = i
 
-    def contractOnce(self):
-        contr = self.nextContraction()
-        if contr is not None:
-            self.doContraction(contr)
-
-    def nextContraction(self):
-        while True:
-            if len(self.heap) == 0: return None
-            contr = heapq.heappop(self.heap)
-            if contr[4]: return contr
+    def processPmRecord(self, rec):
+        coords = self.original_vertices[rec.source]
+        split_index = self.new_v_indices[rec.target]
+        if split_index == -1: raise Exception
+        changed_triangles = [self.new_t_indices[i]
+                             for i in rec.changed_triangles]
+        new_triangles_opp_v = [self.new_v_indices[i]
+                               for i in rec.deleted_triangles_opp_v]
+        new_triangles_flip = []
+        new_triangles_attr = [[] for x in self.original_attributes]
+        for j in range(len(rec.deleted_triangles_perm)):
+            i1, i2, i3 = rec.deleted_triangles_perm[j]
+            flip = (i1,i2,i3) in [(0,2,1),(2,1,0),(1,0,2)]
+            new_triangles_flip.append(flip)
+            tri_index = rec.deleted_triangles[j]
+            for k in range(len(new_triangles_attr)):
+                attr_orig = self.original_attributes[k][tri_index]
+                attr_cur = []
+                if flip: ord = (i2, i1, i3)
+                else: ord = (i1, i2, i3)
+                for ind in ord:
+                    a = attr_orig[ind]
+                    cur_i = self.new_a_indices[k][a]
+                    if cur_i == -1:
+                        attr_cur.append(
+                            self.original_attribute_sources[k][a])
+                        self.new_a_indices[k][a] = self.num_a[k]
+                        self.num_a[k] += 1
+                    else:
+                        attr_cur.append(cur_i)
+                new_triangles_attr[k].append(attr_cur)
+        self.pm.append((self.key, split_index, coords, changed_triangles,
+                        new_triangles_opp_v, new_triangles_flip,
+                   new_triangles_attr))
+        self.new_v_indices[rec.source] = self.num_v
+        self.num_v += 1
+        for tri_i in rec.deleted_triangles:
+            self.new_t_indices[tri_i] = self.num_t
+            self.num_t += 1
 
     # Compute the quadric associated with a vertex during the initialization
     # phase.
@@ -242,7 +235,7 @@ class MeshSimplification:
             contr = [e1, self.numContr, i1, i2, True]
         else:
             contr = [e2, self.numContr, i2, i1, True]
-        heapq.heappush(self.heap, contr)
+        heapq.heappush(self.heap, (contr, self.key))
         self.numContr += 1
         self.contractions[i1][contr[1]] = contr
         self.contractions[i2][contr[1]] = contr
@@ -251,7 +244,7 @@ class MeshSimplification:
     def doContraction(self, contr):
         err, id, i1, i2, valid = contr
 
-        record = ContractionRecord(self.vertex_indices[i2],
+        record = ContractionRecord(self.key, self.vertex_indices[i2],
                                    self.vertex_indices[i1], [], [], [], [])
 
         for i in range(3):
