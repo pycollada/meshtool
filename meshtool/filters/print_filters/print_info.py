@@ -1,5 +1,6 @@
 from meshtool.args import *
 from meshtool.filters.base_filters import *
+import collada
 
 def printMeshInfo(mesh):
     indent = '  '
@@ -27,6 +28,9 @@ def printMeshInfo(mesh):
     print 'Geometries: %d' % len(mesh.geometries)
     for geom in mesh.geometries:
         print indent, geom
+        for srcid, src in geom.sourceById.iteritems():
+            if isinstance(src, collada.source.Source):
+                print indent, indent, "%s: %s" % (srcid, src)
         for prim in geom.primitives:
             print indent, indent, prim
 
