@@ -1,5 +1,4 @@
 import math
-from pprint import pprint
 
 class CouldNotPack:
     pass
@@ -96,7 +95,6 @@ class RectPack:
                         self.height = rect[1] + rect[3]
                 done = True
             except CouldNotPack:
-                print "Could not pack with size",width,"by",height
                 width = int(width * 1.1) + 1
                 height = int(height * 1.1) + 1
 
