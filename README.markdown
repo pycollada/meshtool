@@ -16,6 +16,7 @@ Load
 Save
 ----
 * ``--save_collada file`` - Saves a collada file
+* ``--save_collada_zip file`` - Saves a collada file and textures in a zip file. Normalizes texture paths.
 
 Print
 -----
@@ -40,6 +41,7 @@ Mesh Operations
 * ``--strip_lines`` - Strips any lines from the document
 * ``--triangulate`` - Replaces any polylist or polygons with triangles
 * ``--generate_normals`` - Generates normals for any triangle sets that don't have any
+* ``--strip_empty_geometry`` - Strips any empty geometry from the document and removes them from any scenes
 
 Texture Operations
 ------------------
