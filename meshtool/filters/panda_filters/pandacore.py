@@ -195,36 +195,6 @@ def getPrimAndDataFromTri(triset):
     
     return (vdata, gprim)
 
-def getNodeFromGeom(prim):
-    if type(prim) is collada.triangleset.BoundTriangleSet:
-        
-        (vdata, gprim) = getPrimAndDataFromTri(prim)
-        
-    elif type(prim) is collada.polylist.BoundPolylist or \
-        type(prim) is collada.polygons.BoundPolygons:
-        
-        triset = prim.triangleset()
-        (vdata, gprim) = getPrimAndDataFromTri(triset)
-        
-    elif type(prim) is collada.lineset.BoundLineSet:
-        
-        vdata = getVertexData(prim.vertex, prim.vertex_index)           
-        gprim = GeomLines(Geom.UHStatic)
-        gprim.addConsecutiveVertices(0, 2*prim.nlines)
-        gprim.closePrimitive()
-        
-    else:
-        raise Exception("Error: Unsupported primitive type. Exiting.")
-        
-    pgeom = Geom(vdata)
-    pgeom.addPrimitive(gprim)
-    
-    render_state = getStateFromMaterial(prim.material)
-    node = GeomNode("primitive")
-    node.addGeom(pgeom, render_state)
-    
-    return node
-
 def getTexture(value):
     image_data = value.sampler.surface.image.data
     if image_data:
@@ -441,7 +411,6 @@ def recurseScene(curnode, scene_members, data_cache, M):
                 scene_members.append((primgeom, matstate, mat4))
 
 def getSceneMembers(col):
-    
     #caches materials and geoms so they can be reused
     data_cache = {
       'material2state' : {},
@@ -455,8 +424,9 @@ def getSceneMembers(col):
     scene_members = []
     
     m = numpy.identity(4)
-    for node in col.scene.nodes:
-        recurseScene(node, scene_members, data_cache, m)
+    if col.scene is not None:
+        for node in col.scene.nodes:
+            recurseScene(node, scene_members, data_cache, m)
     
     return scene_members
 
@@ -466,23 +436,25 @@ def setupPandaApp(mesh):
     p3dApp = ShowBase()
     nodePath = getBaseNodePath(render)
     
+    rotateNode = GeomNode("rotater")
+    rotatePath = nodePath.attachNewNode(rotateNode)
+    matrix = numpy.identity(4)
+    if mesh.assetInfo['up_axis'] == 'X_UP':
+        r = collada.scene.RotateTransform(0,1,0,90)
+        matrix = r.matrix
+    elif mesh.assetInfo['up_axis'] == 'Y_UP':
+        r = collada.scene.RotateTransform(1,0,0,90)
+        matrix = r.matrix
+    rotatePath.setMat(Mat4(*matrix.T.flatten().tolist()))
+    
     nodes = []
     for geom, renderstate, mat4 in scene_members:
         node = GeomNode("primitive")
         node.addGeom(geom)
         if renderstate is not None:
             node.setGeomState(0, renderstate)
-        geomPath = nodePath.attachNewNode(node)
+        geomPath = rotatePath.attachNewNode(node)
         geomPath.setMat(mat4)
-        
-    #matrix = numpy.identity(4)
-    #if mesh.assetInfo['up_axis'] == 'X_UP':
-    #    r = collada.scene.RotateTransform(0,1,0,90)
-    #    matrix = r.matrix
-    #elif mesh.assetInfo['up_axis'] == 'Y_UP':
-    #    r = RotateTransform(1,0,0,90)
-    #    matrix = r.matrix
-    #nodePath.setMat(*matrix.T.flatten().tolist())
         
     ensureCameraAt(nodePath, base.camera)
     base.disableMouse()
