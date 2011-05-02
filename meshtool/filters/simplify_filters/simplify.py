@@ -13,7 +13,9 @@ def FilterGenerator():
     class ColladaSimplifyFilter(OpFilter):
         def __init__(self):
             super(ColladaSimplifyFilter, self).__init__(
-                'simplify', 'Simplifies a collada file')
+                'simplify', 'Uses mesh simplificaiton algorithm to remove vertex information ' + 
+                'from the mesh. Removes percent percentage of the vertices and saves our ' +
+                'the results into filename. The file can be loaded with --load_pm.')
             self.arguments.append(FilterArgument(
                     'percent', 'Percentage of vertices to simplify to (0-100)'))
             self.arguments.append(FileArgument(

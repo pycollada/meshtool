@@ -238,7 +238,9 @@ def makeAtlases(mesh):
 def FilterGenerator():
     class MakeAtlasesFilter(OpFilter):
         def __init__(self):
-            super(MakeAtlasesFilter, self).__init__('make_atlases', 'Makes a texture atlas with the textures referenced in the given file')
+            super(MakeAtlasesFilter, self).__init__('make_atlases', 'Makes a texture atlas with the textures referenced in the ' +
+                                                    'given file. Extremely conservative: will only make an atlas from texture ' +
+                                                    'coordinates inside the range (0,1). Atlas can be saved with --save_collada_zip.')
         def apply(self, mesh):
             makeAtlases(mesh)
             return mesh

@@ -11,7 +11,8 @@ def FilterGenerator():
     class ColladaLoadPmFilter(OpFilter):
         def __init__(self):
             super(ColladaLoadPmFilter, self).__init__(
-                'load_pm', 'Loads a PM')
+                'load_pm', 'Loads percent percentage of the extra vertex information ' + 
+                'from filename (saved with --simplify) back into the loaded mesh.')
             self.arguments.append(FilterArgument(
                     'percent', 'Percentage of PM to restore'))
             self.arguments.append(FileArgument(
