@@ -29,6 +29,8 @@ registerModule('meshtool.filters.optimize_filters.triangulate')
 registerModule('meshtool.filters.optimize_filters.generate_normals')
 registerModule('meshtool.filters.optimize_filters.save_mipmaps')
 registerModule('meshtool.filters.atlas_filters.make_atlases')
+registerModule('meshtool.filters.simplify_filters.simplify')
+registerModule('meshtool.filters.simplify_filters.load_pm')
 
 #Save filters last
 registerModule('meshtool.filters.panda_filters.save_screenshot')
