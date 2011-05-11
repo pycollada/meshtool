@@ -13,7 +13,7 @@ from panda3d.core import GeomVertexData, GeomEnums, GeomVertexWriter
 from panda3d.core import GeomLines, GeomTriangles, Geom, GeomNode, NodePath
 from panda3d.core import PNMImage, Texture, StringStream
 from panda3d.core import RenderState, TextureAttrib, MaterialAttrib, Material
-from panda3d.core import TextureStage
+from panda3d.core import TextureStage, RigidBodyCombiner
 from panda3d.core import VBase4, Vec4, Mat4, SparseArray, Vec3
 from panda3d.core import AmbientLight, DirectionalLight, PointLight, Spotlight
 from panda3d.core import Character, PartGroup, CharacterJoint
@@ -22,6 +22,7 @@ from panda3d.core import GeomVertexAnimationSpec, GeomVertexArrayFormat, Interna
 from panda3d.core import AnimBundle, AnimGroup, AnimChannelMatrixXfmTable
 from panda3d.core import PTAFloat, CPTAFloat, AnimBundleNode
 from direct.actor.Actor import Actor
+from panda3d.core import loadPrcFileData
 
 def getNodeFromController(controller, controlled_prim):
     if type(controlled_prim) is collada.controller.BoundSkinPrimitive:
@@ -433,6 +434,7 @@ def getSceneMembers(col):
 def setupPandaApp(mesh):
     scene_members = getSceneMembers(mesh)
     
+    loadPrcFileData('', 'show-frame-rate-meter true')
     p3dApp = ShowBase()
     nodePath = getBaseNodePath(render)
     
@@ -447,19 +449,26 @@ def setupPandaApp(mesh):
         matrix = r.matrix
     rotatePath.setMat(Mat4(*matrix.T.flatten().tolist()))
     
-    nodes = []
+    rbc = RigidBodyCombiner('combiner')
+    rbcPath = rotatePath.attachNewNode(rbc)
+    
     for geom, renderstate, mat4 in scene_members:
         node = GeomNode("primitive")
         node.addGeom(geom)
         if renderstate is not None:
             node.setGeomState(0, renderstate)
-        geomPath = rotatePath.attachNewNode(node)
+        geomPath = rbcPath.attachNewNode(node)
         geomPath.setMat(mat4)
+        
+    rbc.collect()
         
     ensureCameraAt(nodePath, base.camera)
     base.disableMouse()
     attachLights(render)
     render.setShaderAuto()
+    
+    print nodePath.analyze()
+    
     return p3dApp
 
 def getScreenshot(p3dApp):
