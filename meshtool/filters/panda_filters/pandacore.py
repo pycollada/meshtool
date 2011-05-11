@@ -467,7 +467,7 @@ def setupPandaApp(mesh):
     attachLights(render)
     render.setShaderAuto()
     
-    print nodePath.analyze()
+    nodePath.analyze()
     
     return p3dApp
 
