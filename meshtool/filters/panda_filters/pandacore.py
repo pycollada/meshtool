@@ -434,7 +434,6 @@ def getSceneMembers(col):
 def setupPandaApp(mesh):
     scene_members = getSceneMembers(mesh)
     
-    loadPrcFileData('', 'show-frame-rate-meter true')
     p3dApp = ShowBase()
     nodePath = getBaseNodePath(render)
     
