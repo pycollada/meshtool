@@ -1,6 +1,3 @@
 #!/bin/bash
-
 workdir=`dirname $0`
-cd $workdir
-
-PYTHONPATH="./externals/collada:." python2.6 meshtool/__main__.py $@
+PYTHONPATH="$workdir/externals/collada:." python2.6 "$workdir/meshtool/__main__.py" $@
