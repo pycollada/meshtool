@@ -26,6 +26,7 @@ Print
 format
 * ``--print_textures`` - Prints a list of the embedded images in the mesh
 * ``--print_instances`` - Prints geometry instances from the default scene
+* ``--print_scene`` - Prints the default scene tree
 
 View
 ----

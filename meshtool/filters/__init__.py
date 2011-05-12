@@ -17,10 +17,13 @@ registerModule('meshtool.filters.load_filters.load_collada')
 
 #Op filters next
 registerModule('meshtool.filters.print_filters.print_textures')
-registerModule('meshtool.filters.panda_filters.viewer')
 registerModule('meshtool.filters.print_filters.print_json')
 registerModule('meshtool.filters.print_filters.print_info')
 registerModule('meshtool.filters.print_filters.print_instances')
+registerModule('meshtool.filters.print_filters.print_scene')
+
+registerModule('meshtool.filters.panda_filters.viewer')
+
 registerModule('meshtool.filters.optimize_filters.combine_effects')
 registerModule('meshtool.filters.optimize_filters.combine_materials')
 registerModule('meshtool.filters.optimize_filters.combine_primitives')
@@ -29,7 +32,9 @@ registerModule('meshtool.filters.optimize_filters.strip_empty_geometry')
 registerModule('meshtool.filters.optimize_filters.triangulate')
 registerModule('meshtool.filters.optimize_filters.generate_normals')
 registerModule('meshtool.filters.optimize_filters.save_mipmaps')
+
 registerModule('meshtool.filters.atlas_filters.make_atlases')
+
 registerModule('meshtool.filters.simplify_filters.simplify')
 registerModule('meshtool.filters.simplify_filters.load_pm')
 

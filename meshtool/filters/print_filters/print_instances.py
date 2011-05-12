@@ -1,29 +1,22 @@
 from meshtool.args import *
 from meshtool.filters.base_filters import *
 import collada
-import copy
-
-def printNode(node, previous, instances):
-    if isinstance(node, collada.scene.Node):
-        withme = copy.copy(previous)
-        withme.append(node)
-        for child in node.children:
-            printNode(child, withme, instances)
-    else:
-        indent = ''
-        for prev in previous:
-            print indent + str(prev)
-            indent += ' '
-        print indent + str(node)
-        instances.append(node)
 
 def printInstances(mesh):
-    instances = []
-    if mesh.scene is not None:
-        for node in mesh.scene.nodes:
-            printNode(node, [], instances)
-    print
-    print 'Total instances in scene: %d' % len(instances)
+    num_instances = 0
+    if mesh.scene:
+        nodes_to_check = []
+        nodes_to_check.extend(mesh.scene.nodes)
+        while len(nodes_to_check) > 0:
+            curnode = nodes_to_check.pop()
+            for node in curnode.children:
+                if isinstance(node, collada.scene.Node):
+                    nodes_to_check.append(node)
+                elif isinstance(node, collada.scene.GeometryNode) or \
+                        isinstance(node, collada.scene.ControllerNode):
+                    num_instances += 1
+                    print node
+    print 'Total geometries instantiated in default scene: %d' % num_instances
 
 def FilterGenerator():
     class PrintInstancesFilter(OpFilter):
