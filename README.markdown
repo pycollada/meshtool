@@ -71,6 +71,8 @@ depending on source file. DDS support depends on
 * ``--make_atlases`` - Makes a texture atlas with the textures referenced in the
 given file. Extremely conservative: will only make an atlas from texture
 coordinates inside the range (0,1). Atlas can be saved with --save_collada_zip.
+* ``--optimize_textures`` - Converts all textures with alpha channel to PNG and
+ones without to JPEG
 
 EXAMPLES
 ========

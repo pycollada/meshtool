@@ -8,14 +8,14 @@ import Image
 from StringIO import StringIO
 import math
 import tarfile
-
-#Following is a workaround for setting quality=95, optimize=1 when encoding JPEG
-#Otherwise, an error is output when trying to save
-#Taken from http://mail.python.org/pipermail/image-sig/1999-August/000816.html
 import ImageFile
-ImageFile.MAXBLOCK = 1000000 # default is 64k
 
 def getMipMaps(mesh):
+    #Following is a workaround for setting quality=95, optimize=1 when encoding JPEG
+    #Otherwise, an error is output when trying to save
+    #Taken from http://mail.python.org/pipermail/image-sig/1999-August/000816.html
+    ImageFile.MAXBLOCK = 20*1024*1024 # default is 64k, setting to 20MB to handle large textures
+    
     mipmaps = {}
     for effect in mesh.effects:
         for prop in effect.supported:
