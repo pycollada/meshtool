@@ -394,22 +394,23 @@ def recurseScene(curnode, scene_members, data_cache, M):
                 materialnodesbysymbol[mat.symbol] = mat
 
             for prim in geom.primitives:
-                primgeom = data_cache['prim2geom'].get(prim)
-                if primgeom is None:
-                    primgeom = getGeomFromPrim(prim)
-                    data_cache['prim2geom'][prim] = primgeom
+                if len(prim) > 0:
+                    primgeom = data_cache['prim2geom'].get(prim)
+                    if primgeom is None:
+                        primgeom = getGeomFromPrim(prim)
+                        data_cache['prim2geom'][prim] = primgeom
+                        
+                    mat = materialnodesbysymbol.get(prim.material)
+                    matstate = None
+                    if mat is not None:
+                        matstate = data_cache['material2state'].get(mat)
+                        if matstate is None:
+                            matstate = getStateFromMaterial(mat.target)
+                            data_cache['material2state'][mat] = matstate
                     
-                mat = materialnodesbysymbol.get(prim.material)
-                matstate = None
-                if mat is not None:
-                    matstate = data_cache['material2state'].get(mat)
-                    if matstate is None:
-                        matstate = getStateFromMaterial(mat.target)
-                        data_cache['material2state'][mat] = matstate
-                
-                mat4 = Mat4(*M.T.flatten().tolist())
-                
-                scene_members.append((primgeom, matstate, mat4))
+                    mat4 = Mat4(*M.T.flatten().tolist())
+                    
+                    scene_members.append((primgeom, matstate, mat4))
 
 def getSceneMembers(col):
     #caches materials and geoms so they can be reused
