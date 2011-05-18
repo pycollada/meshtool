@@ -67,6 +67,8 @@ def optimizeTextures(mesh):
             output_extension = '.png'
             output_options = {'optimize':True}
         else:
+            if pilimg.format != 'RGB':
+                pilimg = pilimg.convert("RGB")
             #otherwise save as JPEG since it gets 
             output_format = 'JPEG'
             output_extension = '.jpg'
