@@ -273,7 +273,7 @@ def getStateFromMaterial(prim_material):
                     if value < 0.01:
                         value = 1.0
                     value = value * 128.0
-                #mat.setShininess(value)
+                mat.setShininess(value)
             elif prop == 'reflective':
                 pass
             elif prop == 'reflectivity':
