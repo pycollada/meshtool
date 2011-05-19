@@ -20,6 +20,9 @@ def combinePrimitives(mesh):
                     elif isinstance(node, collada.scene.GeometryNode):
                         if node.geometry == geometry:
                             instantiations.append(node)
+                    elif isinstance(node, collada.scene.ControllerNode):
+                        if node.controller.geometry == geometry:
+                            instantiations.append(node)
         
         # now we will group the primitives into sets of primitives that get
         # bound to the same material for each instantiation
