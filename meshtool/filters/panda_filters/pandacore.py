@@ -230,8 +230,6 @@ def getStateFromMaterial(prim_material):
             if value is None:
                 continue
             
-            print prop, value
-            
             if type(value) is tuple:
                 val4 = value[3] if len(value) > 3 else 1.0
                 value = VBase4(value[0], value[1], value[2], val4)
@@ -270,11 +268,12 @@ def getStateFromMaterial(prim_material):
                 else:
                     mat.setSpecular(value)
             elif prop == 'shininess':
+                #this sets a sane value for blinn shading
                 if value <= 1.0:
                     if value < 0.01:
                         value = 1.0
                     value = value * 128.0
-                mat.setShininess(value)
+                #mat.setShininess(value)
             elif prop == 'reflective':
                 pass
             elif prop == 'reflectivity':
@@ -290,21 +289,17 @@ def getStateFromMaterial(prim_material):
                 ts = TextureStage('tsBump')
                 ts.setMode(TextureStage.MNormal)
                 texattr = texattr.addOnStage(ts, myTexture)
-                print
-                print 'BUMP BUMP BUMP'
-                print prim_material.effect.bumpmap
-                print
 
     state = state.addAttrib(MaterialAttrib.make(mat))
     state = state.addAttrib(texattr)
     return state
 
 def setCameraAngle(ang):
-    base.camera.setPos(15.0 * sin(ang), -15.0 * cos(ang), 0)
+    base.camera.setPos(20.0 * sin(ang), -20.0 * cos(ang), 0)
     base.camera.lookAt(0.0, 0.0, 0.0)
 
 def spinCameraTask(task):
-    speed = 10.0
+    speed = 5.0
     curSpot = task.time % speed
     angleDegrees = (curSpot / speed) * 360
     angleRadians = angleDegrees * (pi / 180.0)
@@ -322,7 +317,6 @@ def rotsToMat4(x, y, z):
     roty = Mat4(cos(y),0,sin(y),0,0,1,0,0,-sin(y),0,cos(y),0,0,0,0,1);
     rotz = Mat4(cos(z),-sin(z),0,0,sin(z),cos(z),0,0,0,0,1,0,0,0,0,1);
     swapyz = Mat4.rotateMat(90, Vec3(-1,0,0))
-    print swapyz
     return rotx * roty * rotz * swapyz
 
 def attachLights(render):
@@ -497,6 +491,7 @@ def setupPandaApp(mesh):
     return p3dApp
 
 def getScreenshot(p3dApp):
+    p3dApp.taskMgr.step()
     p3dApp.taskMgr.step()
     pnmss = PNMImage()
     p3dApp.win.getScreenshot(pnmss)
