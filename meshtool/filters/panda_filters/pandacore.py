@@ -230,14 +230,27 @@ def getStateFromMaterial(prim_material):
             if value is None:
                 continue
             
+            print prop, value
+            
             if type(value) is tuple:
                 val4 = value[3] if len(value) > 3 else 1.0
                 value = VBase4(value[0], value[1], value[2], val4)
             
             if prop == 'emission':
-                mat.setEmission(value)
+                if isinstance(value, collada.material.Map):
+                    myTexture = getTexture(value)
+                    if myTexture:
+                        ts = TextureStage('tsEmiss')
+                        ts.setMode(TextureStage.MGlow)
+                        texattr = texattr.addOnStage(ts, myTexture)
+                else:
+                    mat.setEmission(value)
             elif prop == 'ambient':
-                mat.setAmbient(value)
+                if isinstance(value, collada.material.Map):
+                    #panda3d doesn't seem to support this
+                    pass
+                else:
+                    mat.setAmbient(value)
             elif prop == 'diffuse':
                 if isinstance(value, collada.material.Map):
                     myTexture = getTexture(value)
@@ -248,19 +261,20 @@ def getStateFromMaterial(prim_material):
                 else:
                     mat.setDiffuse(value)
             elif prop == 'specular':
-                pass
-                #disabling this until we figure out how to properly support specular lighting
-                #if isinstance(value, collada.material.Map):
-                #    myTexture = getTexture(value)
-                #    if myTexture:
-                #        ts = TextureStage('tsSpec')
-                #        ts.setMode(TextureStage.MGlow)
-                #        texattr = texattr.addOnStage(ts, myTexture)
-                #mat.setSpecular(value)
+                if isinstance(value, collada.material.Map):
+                    myTexture = getTexture(value)
+                    if myTexture:
+                        ts = TextureStage('tsSpec')
+                        ts.setMode(TextureStage.MGloss)
+                        texattr = texattr.addOnStage(ts, myTexture)
+                else:
+                    mat.setSpecular(value)
             elif prop == 'shininess':
-                pass
-                #disabling this until we figure out how to properly support specular lighting
-                #mat.setShininess(value)
+                if value <= 1.0:
+                    if value < 0.01:
+                        value = 1.0
+                    value = value * 128.0
+                mat.setShininess(value)
             elif prop == 'reflective':
                 pass
             elif prop == 'reflectivity':
@@ -270,16 +284,27 @@ def getStateFromMaterial(prim_material):
             elif prop == 'transparency':
                 pass
 
+        if prim_material.effect.bumpmap:
+            myTexture = getTexture(prim_material.effect.bumpmap)
+            if myTexture:
+                ts = TextureStage('tsBump')
+                ts.setMode(TextureStage.MNormal)
+                texattr = texattr.addOnStage(ts, myTexture)
+                print
+                print 'BUMP BUMP BUMP'
+                print prim_material.effect.bumpmap
+                print
+
     state = state.addAttrib(MaterialAttrib.make(mat))
     state = state.addAttrib(texattr)
     return state
 
 def setCameraAngle(ang):
-    base.camera.setPos(20.0 * sin(ang), -20.0 * cos(ang), 0)
+    base.camera.setPos(15.0 * sin(ang), -15.0 * cos(ang), 0)
     base.camera.lookAt(0.0, 0.0, 0.0)
 
 def spinCameraTask(task):
-    speed = 5.0
+    speed = 10.0
     curSpot = task.time % speed
     angleDegrees = (curSpot / speed) * 360
     angleRadians = angleDegrees * (pi / 180.0)
@@ -325,10 +350,10 @@ def attachLights(render):
     dlNP.setHpr(-90, 45, 0)
     render.setLight(dlNP)
     
-    #ambientLight = AmbientLight('ambientLight')
-    #ambientLight.setColor(Vec4(0.1, 0.1, 0.1, 1))
-    #ambientLightNP = render.attachNewNode(ambientLight)
-    #render.setLight(ambientLightNP)
+    ambientLight = AmbientLight('ambientLight')
+    ambientLight.setColor(Vec4(0.1, 0.1, 0.1, 1))
+    ambientLightNP = render.attachNewNode(ambientLight)
+    render.setLight(ambientLightNP)
     
     #directionalPoints = [(-15,10,-12), (-13,-14,11)]#,
                          #(0,-10,0), (0,10,0),
