@@ -4,6 +4,7 @@ import posixpath
 import struct
 from math import pi, sin, cos
 import Image
+import ImageOps
 from StringIO import StringIO
 
 from direct.task import Task
@@ -13,7 +14,7 @@ from panda3d.core import GeomVertexData, GeomEnums, GeomVertexWriter
 from panda3d.core import GeomLines, GeomTriangles, Geom, GeomNode, NodePath
 from panda3d.core import PNMImage, Texture, StringStream
 from panda3d.core import RenderState, TextureAttrib, MaterialAttrib, Material
-from panda3d.core import TextureStage, RigidBodyCombiner
+from panda3d.core import TextureStage, RigidBodyCombiner, CullFaceAttrib
 from panda3d.core import VBase4, Vec4, Mat4, SparseArray, Vec3
 from panda3d.core import AmbientLight, DirectionalLight, PointLight, Spotlight
 from panda3d.core import Character, PartGroup, CharacterJoint
@@ -196,8 +197,19 @@ def getPrimAndDataFromTri(triset):
     
     return (vdata, gprim)
 
-def getTexture(value):
+def getTexture(value, grayscale=False):
     image_data = value.sampler.surface.image.data
+    
+    if grayscale:
+        im = Image.open(StringIO(image_data))
+        im.load()
+        gray = ImageOps.grayscale(im)
+        alpha = Image.new('RGBA', im.size)
+        alpha.putalpha(gray)
+        newbuf = StringIO()
+        alpha.save(newbuf, 'PNG')
+        image_data = newbuf.getvalue()
+    
     if image_data:
         myTexture = Texture(value.sampler.surface.image.id)
         
@@ -236,7 +248,7 @@ def getStateFromMaterial(prim_material):
             
             if prop == 'emission':
                 if isinstance(value, collada.material.Map):
-                    myTexture = getTexture(value)
+                    myTexture = getTexture(value, grayscale=True)
                     if myTexture:
                         ts = TextureStage('tsEmiss')
                         ts.setMode(TextureStage.MGlow)
@@ -265,8 +277,9 @@ def getStateFromMaterial(prim_material):
                         ts = TextureStage('tsSpec')
                         ts.setMode(TextureStage.MGloss)
                         texattr = texattr.addOnStage(ts, myTexture)
+                    mat.setSpecular(VBase4(0.3, 0.3, 0.3, 1.0))
                 else:
-                    mat.setSpecular(value)
+                    mat.setSpecular(VBase4(0.3*value[0], 0.3*value[1], 0.3*value[2], value[3]))
             elif prop == 'shininess':
                 #this sets a sane value for blinn shading
                 if value <= 1.0:
@@ -292,6 +305,11 @@ def getStateFromMaterial(prim_material):
 
     state = state.addAttrib(MaterialAttrib.make(mat))
     state = state.addAttrib(texattr)
+    
+    #This seems to be the right thing to do for some models but not others
+    # and the DOUBLE_SIDED attribute in collada doesn't seem to be much help
+    # so leaving disabled for now
+    #state = state.addAttrib(CullFaceAttrib.make(CullFaceAttrib.MCullNone))
     return state
 
 def setCameraAngle(ang):
@@ -348,17 +366,6 @@ def attachLights(render):
     ambientLight.setColor(Vec4(0.1, 0.1, 0.1, 1))
     ambientLightNP = render.attachNewNode(ambientLight)
     render.setLight(ambientLightNP)
-    
-    #directionalPoints = [(-15,10,-12), (-13,-14,11)]#,
-                         #(0,-10,0), (0,10,0),
-                         #(0, 0, -10), (0,0,10)]
-    
-    #for pt in directionalPoints:
-    #    plight = PointLight('plight')
-    #    plight.setColor(Vec4(1, 1, 1, 1))
-    #    plightNP = render.attachNewNode(plight)
-    #    plightNP.setPos(pt[0], pt[1], pt[2])
-    #    render.setLight(plightNP)
 
 def getBaseNodePath(render):
     globNode = GeomNode("collada")
@@ -485,9 +492,7 @@ def setupPandaApp(mesh):
     base.disableMouse()
     attachLights(render)
     render.setShaderAuto()
-    
-    nodePath.analyze()
-    
+
     return p3dApp
 
 def getScreenshot(p3dApp):

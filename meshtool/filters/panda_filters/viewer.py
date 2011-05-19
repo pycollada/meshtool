@@ -2,10 +2,12 @@ from meshtool.args import *
 from meshtool.filters.base_filters import *
 
 from pandacore import setupPandaApp, spinCameraTask
+from pandacontrols import KeyboardMovement
 
 def runViewer(mesh):
     p3dApp = setupPandaApp(mesh)
-    p3dApp.taskMgr.add(spinCameraTask, "SpinCameraTask")
+    p3dApp.render.analyze()
+    KeyboardMovement()
     p3dApp.run()
 
 def FilterGenerator():
