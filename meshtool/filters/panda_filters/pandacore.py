@@ -134,46 +134,56 @@ def getNodeFromController(controller, controlled_prim):
     else:
         raise Exception("Error: unsupported controller type")
 
-def getVertexData(vertex, vertex_index, normal=None, normal_index=None, texcoordset=(), texcoord_indexset=()):
+def getVertexData(vertex, vertex_index, normal=None, normal_index=None,
+                  texcoordset=(), texcoord_indexset=(),
+                  textangentset=(), textangent_indexset=(),
+                  texbinormalset=(), texbinormal_indexset=()):
+    
+    format = GeomVertexFormat()
+    formatArray = GeomVertexArrayFormat() 
+    
     vertex_data = vertex[vertex_index]
     vertex_data.shape = (-1, 3)
     stacked = vertex_data
     vertex_data = None
+    formatArray.addColumn(InternalName.make("vertex"), 3, Geom.NTFloat32, Geom.CPoint) 
+    
     if normal is not None:
         normal_data = normal[normal_index]
         normal_data.shape = (-1, 3)
         collada.util.normalize_v3(normal_data)
         stacked = numpy.hstack((stacked, normal_data))
         normal_data = None
+        formatArray.addColumn(InternalName.make("normal"), 3, Geom.NTFloat32, Geom.CVector)
     if len(texcoordset) > 0:
         texcoord_data = texcoordset[0][texcoord_indexset[0]]
         texcoord_data.shape = (-1, 2)
         stacked = numpy.hstack((stacked, texcoord_data))
         texcoord_data = None
-
-    if normal is None and len(texcoordset) == 0:
-        format = GeomVertexFormat.getV3() #just vertices
-        stride = 12
-    elif normal is not None and len(texcoordset) == 0:
-        format = GeomVertexFormat.getV3n3() #vertices + normals
-        stride = 24
-    elif normal is None and len(texcoordset) > 0:
-        format = GeomVertexFormat.getV3t2() #vertices + texcoords
-        stride = 20
-    else:
-        format = GeomVertexFormat.getV3n3t2()
-        stride = 32
-        
-    assert(stacked.shape[1]*4 == stride)
+        formatArray.addColumn(InternalName.make("texcoord"), 2, Geom.NTFloat32, Geom.CTexcoord)
+    if len(textangentset) > 0:
+        textangent_data = textangentset[0][textangent_indexset[0]]
+        textangent_data.shape = (-1, 3)
+        stacked = numpy.hstack((stacked, textangent_data))
+        textangent_data = None
+        formatArray.addColumn(InternalName.make("tangent"), 3, Geom.NTFloat32, Geom.CVector)
+    if len(texbinormalset) > 0:
+        texbinormal_data = texbinormalset[0][texbinormal_indexset[0]]
+        texbinormal_data.shape = (-1, 3)
+        stacked = numpy.hstack((stacked, texbinormal_data))
+        texbinormal_data = None
+        formatArray.addColumn(InternalName.make("binormal"), 3, Geom.NTFloat32, Geom.CVector)
 
     stacked = stacked.flatten()
     stacked.shape = (-1)
-    assert(stacked.dtype == numpy.float32)
     all_data = stacked.tostring()
     stacked = None
 
+    format.addArray(formatArray)
+    format = GeomVertexFormat.registerFormat(format)
+    
     vdata = GeomVertexData("dataname", format, Geom.UHStatic)
-    arr = GeomVertexArrayData(vdata.getArray(0).getArrayFormat(), GeomEnums.UHStream)
+    arr = GeomVertexArrayData(formatArray, GeomEnums.UHStream)
     datahandle = arr.modifyHandle()
     datahandle.setData(all_data)
     all_data = None
@@ -189,7 +199,9 @@ def getPrimAndDataFromTri(triset):
 
     vdata = getVertexData(triset.vertex, triset.vertex_index,
                           triset.normal, triset.normal_index,
-                          triset.texcoordset, triset.texcoord_indexset)
+                          triset.texcoordset, triset.texcoord_indexset,
+                          triset.textangentset, triset.textangent_indexset,
+                          triset.texbinormalset, triset.texbinormal_indexset)
 
     gprim = GeomTriangles(Geom.UHStatic)
     gprim.addConsecutiveVertices(0, 3*triset.ntriangles)
