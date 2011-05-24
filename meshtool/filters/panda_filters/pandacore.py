@@ -183,7 +183,7 @@ def getVertexData(vertex, vertex_index, normal=None, normal_index=None,
     format = GeomVertexFormat.registerFormat(format)
     
     vdata = GeomVertexData("dataname", format, Geom.UHStatic)
-    arr = GeomVertexArrayData(formatArray, GeomEnums.UHStream)
+    arr = GeomVertexArrayData(format.getArray(0), GeomEnums.UHStream)
     datahandle = arr.modifyHandle()
     datahandle.setData(all_data)
     all_data = None
@@ -193,9 +193,20 @@ def getVertexData(vertex, vertex_index, normal=None, normal_index=None,
     
     return vdata
 
-def getPrimAndDataFromTri(triset):
+def getPrimAndDataFromTri(triset, matstate):
     if triset.normal is None:
         triset.generateNormals()
+
+    needsTanAndBin = False
+    if matstate.hasAttrib(TextureAttrib):
+        texattr = matstate.getAttrib(TextureAttrib)
+        for i in range(texattr.getNumOnStages()):
+            if texattr.getOnStage(i).getMode() == TextureStage.MNormal:
+                needsTanAndBin = True
+    
+    if needsTanAndBin and isinstance(triset, collada.triangleset.TriangleSet) and \
+            len(triset.texcoordset) > 0 and len(triset.textangentset) == 0:
+        triset.generateTexTangentsAndBinormals()
 
     vdata = getVertexData(triset.vertex, triset.vertex_index,
                           triset.normal, triset.normal_index,
@@ -289,7 +300,7 @@ def getStateFromMaterial(prim_material):
                         ts = TextureStage('tsSpec')
                         ts.setMode(TextureStage.MGloss)
                         texattr = texattr.addOnStage(ts, myTexture)
-                    mat.setSpecular(VBase4(0.3, 0.3, 0.3, 1.0))
+                    mat.setSpecular(VBase4(0.1, 0.1, 0.1, 1.0))
                 else:
                     mat.setSpecular(VBase4(0.3*value[0], 0.3*value[1], 0.3*value[2], value[3]))
             elif prop == 'shininess':
@@ -398,12 +409,12 @@ def ensureCameraAt(nodePath, cam):
     cam.setPos(15, -15, 0)
     cam.lookAt(0.0, 0.0, 0.0)
 
-def getGeomFromPrim(prim):
+def getGeomFromPrim(prim, matstate):
     if type(prim) is collada.triangleset.TriangleSet:
-        (vdata, gprim) = getPrimAndDataFromTri(prim)
+        (vdata, gprim) = getPrimAndDataFromTri(prim, matstate)
     elif type(prim) is collada.polylist.Polylist or type(prim) is collada.polygons.Polygons:
         triset = prim.triangleset()
-        (vdata, gprim) = getPrimAndDataFromTri(triset)
+        (vdata, gprim) = getPrimAndDataFromTri(triset, matstate)
     elif type(prim) is collada.lineset.LineSet:
         vdata = getVertexData(prim.vertex, prim.vertex_index)           
         gprim = GeomLines(Geom.UHStatic)
@@ -433,11 +444,6 @@ def recurseScene(curnode, scene_members, data_cache, M):
 
             for prim in geom.primitives:
                 if len(prim) > 0:
-                    primgeom = data_cache['prim2geom'].get(prim)
-                    if primgeom is None:
-                        primgeom = getGeomFromPrim(prim)
-                        data_cache['prim2geom'][prim] = primgeom
-                        
                     mat = materialnodesbysymbol.get(prim.material)
                     matstate = None
                     if mat is not None:
@@ -447,6 +453,11 @@ def recurseScene(curnode, scene_members, data_cache, M):
                             data_cache['material2state'][mat] = matstate
                     
                     mat4 = Mat4(*M.T.flatten().tolist())
+                    
+                    primgeom = data_cache['prim2geom'].get(prim)
+                    if primgeom is None:
+                        primgeom = getGeomFromPrim(prim, matstate)
+                        data_cache['prim2geom'][prim] = primgeom
                     
                     scene_members.append((primgeom, matstate, mat4))
 
