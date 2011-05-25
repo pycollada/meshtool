@@ -198,7 +198,7 @@ def getPrimAndDataFromTri(triset, matstate):
         triset.generateNormals()
 
     needsTanAndBin = False
-    if matstate.hasAttrib(TextureAttrib):
+    if matstate is not None and matstate.hasAttrib(TextureAttrib):
         texattr = matstate.getAttrib(TextureAttrib)
         for i in range(texattr.getNumOnStages()):
             if texattr.getOnStage(i).getMode() == TextureStage.MNormal:
@@ -220,7 +220,13 @@ def getPrimAndDataFromTri(triset, matstate):
     
     return (vdata, gprim)
 
-def getTexture(value, grayscale=False):
+def getTexture(value, grayscale=False, texture_cache=None):
+
+    if texture_cache is not None:
+        unique_id = str(id(value.sampler.surface.image)) + '_' + str(id(grayscale))
+        if unique_id in texture_cache:
+            return texture_cache[unique_id]
+
     image_data = value.sampler.surface.image.data
     
     if grayscale:
@@ -232,6 +238,8 @@ def getTexture(value, grayscale=False):
         newbuf = StringIO()
         alpha.save(newbuf, 'PNG')
         image_data = newbuf.getvalue()
+    
+    tex = None
     
     if image_data:
         myTexture = Texture(value.sampler.surface.image.id)
@@ -246,14 +254,14 @@ def getTexture(value, grayscale=False):
             #Except for DDS, which PNMImage.read will return 0, so try to load as DDS
             success = myTexture.readDds(StringStream(image_data))
             
-        if success == 0:
-            return None
-            
-        return myTexture
-    else:
-        return None
+        if success != 0:
+            tex = myTexture
 
-def getStateFromMaterial(prim_material):
+    if texture_cache is not None:
+        texture_cache[unique_id] = tex
+    return tex
+
+def getStateFromMaterial(prim_material, texture_cache):
     state = RenderState.makeFullDefault()
     
     mat = Material()
@@ -271,7 +279,7 @@ def getStateFromMaterial(prim_material):
             
             if prop == 'emission':
                 if isinstance(value, collada.material.Map):
-                    myTexture = getTexture(value, grayscale=True)
+                    myTexture = getTexture(value, grayscale=True, texture_cache=texture_cache)
                     if myTexture:
                         ts = TextureStage('tsEmiss')
                         ts.setMode(TextureStage.MGlow)
@@ -286,7 +294,7 @@ def getStateFromMaterial(prim_material):
                     mat.setAmbient(value)
             elif prop == 'diffuse':
                 if isinstance(value, collada.material.Map):
-                    myTexture = getTexture(value)
+                    myTexture = getTexture(value, texture_cache=texture_cache)
                     if myTexture:
                         ts = TextureStage('tsDiff')
                         ts.setMode(TextureStage.MModulate)
@@ -295,7 +303,7 @@ def getStateFromMaterial(prim_material):
                     mat.setDiffuse(value)
             elif prop == 'specular':
                 if isinstance(value, collada.material.Map):
-                    myTexture = getTexture(value)
+                    myTexture = getTexture(value, texture_cache=texture_cache)
                     if myTexture:
                         ts = TextureStage('tsSpec')
                         ts.setMode(TextureStage.MGloss)
@@ -320,19 +328,18 @@ def getStateFromMaterial(prim_material):
                 pass
 
         if prim_material.effect.bumpmap:
-            myTexture = getTexture(prim_material.effect.bumpmap)
+            myTexture = getTexture(prim_material.effect.bumpmap, texture_cache=texture_cache)
             if myTexture:
                 ts = TextureStage('tsBump')
                 ts.setMode(TextureStage.MNormal)
                 texattr = texattr.addOnStage(ts, myTexture)
 
+        if prim_material.effect.double_sided:
+            state = state.addAttrib(CullFaceAttrib.make(CullFaceAttrib.MCullNone))
+
     state = state.addAttrib(MaterialAttrib.make(mat))
     state = state.addAttrib(texattr)
     
-    #This seems to be the right thing to do for some models but not others
-    # and the DOUBLE_SIDED attribute in collada doesn't seem to be much help
-    # so leaving disabled for now
-    #state = state.addAttrib(CullFaceAttrib.make(CullFaceAttrib.MCullNone))
     return state
 
 def setCameraAngle(ang):
@@ -386,7 +393,7 @@ def attachLights(render):
     render.setLight(dlNP)
     
     ambientLight = AmbientLight('ambientLight')
-    ambientLight.setColor(Vec4(0.1, 0.1, 0.1, 1))
+    ambientLight.setColor(Vec4(0.2, 0.2, 0.2, 1))
     ambientLightNP = render.attachNewNode(ambientLight)
     render.setLight(ambientLightNP)
 
@@ -406,7 +413,7 @@ def ensureCameraAt(nodePath, cam):
                         -1 * boundingSphere.getCenter().getZ())
         nodePath.setHpr(0,0,0)
        
-    cam.setPos(15, -15, 0)
+    cam.setPos(15, -15, 1)
     cam.lookAt(0.0, 0.0, 0.0)
 
 def getGeomFromPrim(prim, matstate):
@@ -427,11 +434,11 @@ def getGeomFromPrim(prim, matstate):
     pgeom.addPrimitive(gprim)
     return pgeom
 
-def recurseScene(curnode, scene_members, data_cache, M):
+def recurseScene(curnode, scene_members, data_cache, M, texture_cache):
     M = numpy.dot(M, curnode.matrix)
     for node in curnode.children:
         if isinstance(node, collada.scene.Node):
-            recurseScene(node, scene_members, data_cache, M)
+            recurseScene(node, scene_members, data_cache, M, texture_cache)
         elif isinstance(node, collada.scene.GeometryNode) or isinstance(node, collada.scene.ControllerNode):
             if isinstance(node, collada.scene.GeometryNode):
                 geom = node.geometry
@@ -449,7 +456,7 @@ def recurseScene(curnode, scene_members, data_cache, M):
                     if mat is not None:
                         matstate = data_cache['material2state'].get(mat)
                         if matstate is None:
-                            matstate = getStateFromMaterial(mat.target)
+                            matstate = getStateFromMaterial(mat.target, texture_cache)
                             data_cache['material2state'][mat] = matstate
                     
                     mat4 = Mat4(*M.T.flatten().tolist())
@@ -475,9 +482,10 @@ def getSceneMembers(col):
     scene_members = []
     
     m = numpy.identity(4)
+    texture_cache = {}
     if col.scene is not None:
         for node in col.scene.nodes:
-            recurseScene(node, scene_members, data_cache, m)
+            recurseScene(node, scene_members, data_cache, m, texture_cache)
     
     return scene_members
 
@@ -546,7 +554,7 @@ def getScreenshot(p3dApp):
     nicealpha = pilimage.split()[-1]
     
     combined_alpha = numpy.array(nicealpha.getdata())
-    combined_alpha[badalpha == 0] = 255
+    combined_alpha[badalpha < 255] = 255
     nicealpha.putdata(combined_alpha)
     
     pilimage.putalpha(nicealpha)
