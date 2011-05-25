@@ -112,16 +112,18 @@ def packImages(mesh, img2texs, unique_images):
         x,y,w,h = rp.getPlacement(path)
         atlasimg.paste(pilimg, (x,y,x+w,y+h))
         
+        x,y,w,h,width,height = (float(i) for i in (x,y,w,h,width,height))
+        
         for texset in img2texs[path]:
             geom = mesh.geometries[texset.geom_id]
             prim = geom.primitives[texset.prim_index]
-            texarray = prim.texcoordset[texset.texcoordset_index]
-            texarray = texarray - numpy.floor(texarray)
+            texarray = numpy.copy(prim.texcoordset[texset.texcoordset_index])
+            #texarray = texarray - numpy.floor(texarray)
             
-            x_scale = float(w) / width
-            y_scale = float(h) / height
-            x_offset = float(x) / width
-            y_offset = float(y) / height
+            x_scale = w / width
+            y_scale = h / height
+            x_offset = x / width
+            y_offset = 1.0 - (y+h)/height
 
             texarray[:,0] = texarray[:,0] * x_scale + x_offset
             texarray[:,1] = texarray[:,1] * y_scale + y_offset
@@ -207,6 +209,8 @@ def makeAtlases(mesh):
         valid_range = False
         if numpy.min(texarray) >= -0.00001 and numpy.max(texarray) <= 1.00001:
             valid_range = True
+        else:
+            print 'disqualifying because range is (%f, %f)' % (numpy.min(texarray), numpy.max(texarray))
         
         if len(imgpaths) > 1 or not valid_range:
             for imgpath in imgpaths:
