@@ -108,6 +108,8 @@ def packImages(mesh, img2texs, unique_images):
     print "actually making atlas of size %dx%d with %d subimages referenced by %d texcoords" % \
         (width, height, len(unique_images), sum([len(img2texs[imgpath]) for imgpath in unique_images]))
     atlasimg = Image.new('RGBA', (width, height))
+    
+    to_del = {}
     for path, pilimg in unique_images.iteritems():
         x,y,w,h = rp.getPlacement(path)
         atlasimg.paste(pilimg, (x,y,x+w,y+h))
@@ -118,7 +120,6 @@ def packImages(mesh, img2texs, unique_images):
             geom = mesh.geometries[texset.geom_id]
             prim = geom.primitives[texset.prim_index]
             texarray = numpy.copy(prim.texcoordset[texset.texcoordset_index])
-            #texarray = texarray - numpy.floor(texarray)
             
             x_scale = w / width
             y_scale = h / height
@@ -132,13 +133,18 @@ def packImages(mesh, img2texs, unique_images):
             newsources = collada.source.InputList()
             for (offset, semantic, source, set) in oldsources:
                 if semantic == 'TEXCOORD' and int(set) == texset.texcoordset_index:
+                    orig_source = source
+                    i=0
                     while source[1:] in geom.sourceById:
-                        source += '-atlas'
+                        source = orig_source + '-atlas-' + str(i)
+                        i += 1
                     new_tex_src = collada.source.FloatSource(source[1:], texarray, ('S', 'T'))
                     geom.sourceById[source[1:]] = new_tex_src
                 newsources.addInput(offset, semantic, source, set)
             
-            del geom.primitives[texset.prim_index]
+            if geom not in to_del:
+                to_del[geom] = []
+            to_del[geom].append(texset.prim_index)
             
             if type(prim) is collada.triangleset.TriangleSet:
                 prim.index.shape = -1
@@ -157,6 +163,10 @@ def packImages(mesh, img2texs, unique_images):
                 raise Exception("Unknown primitive type")
             
             geom.primitives.append(newprim)
+                        
+    for geom, primindices in to_del.iteritems():
+        for i in sorted(primindices, reverse=True):
+            del geom.primitives[i]
         
     imgs_deleted = [cimg for cimg in mesh.images if cimg.path in unique_images]
     mesh.images = [cimg for cimg in mesh.images if cimg.path not in unique_images]
@@ -180,7 +190,8 @@ def packImages(mesh, img2texs, unique_images):
         for prop in effect.supported:
             propval = getattr(effect, prop)
             if type(propval) is collada.material.Map:
-                propval.sampler.surface.image = newcimage
+                if propval.sampler.surface.image in imgs_deleted:
+                    propval.sampler.surface.image = newcimage
 
 def makeAtlases(mesh):
     # get a mapping from path to actual image, since theoretically you could have
