@@ -14,7 +14,7 @@ from panda3d.core import GeomVertexData, GeomEnums, GeomVertexWriter
 from panda3d.core import GeomLines, GeomTriangles, Geom, GeomNode, NodePath
 from panda3d.core import PNMImage, Texture, StringStream
 from panda3d.core import RenderState, TextureAttrib, MaterialAttrib, Material
-from panda3d.core import TextureStage, RigidBodyCombiner, CullFaceAttrib
+from panda3d.core import TextureStage, RigidBodyCombiner, CullFaceAttrib, TransparencyAttrib
 from panda3d.core import VBase4, Vec4, Mat4, SparseArray, Vec3
 from panda3d.core import AmbientLight, DirectionalLight, PointLight, Spotlight
 from panda3d.core import Character, PartGroup, CharacterJoint
@@ -516,6 +516,7 @@ def setupPandaApp(mesh):
             node.setGeomState(0, renderstate)
         geomPath = rbcPath.attachNewNode(node)
         geomPath.setMat(mat4)
+        geomPath.setTransparency(TransparencyAttrib.MAlpha, 1)
         
     rbc.collect()
         
