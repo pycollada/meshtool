@@ -24,6 +24,7 @@ def FilterGenerator():
                 
             names_used = [dirname + '.dae']
             
+            prev_written = []
             for cimg in mesh.images:
                 img_data = cimg.data
                 img_name = posixpath.basename(cimg.path)
@@ -39,7 +40,10 @@ def FilterGenerator():
                 while base_img_name + img_ext in names_used:
                     base_img_name = base_img_name + 'x'
                 
-                zip.writestr("%s/%s%s" % (dirname, base_img_name, img_ext), img_data)
+                img_path = "%s/%s%s" % (dirname, base_img_name, img_ext)
+                if img_path not in prev_written:
+                    zip.writestr(img_path, img_data)
+                    prev_written.append(img_path)
                 
                 cimg.path = "./%s%s" % (base_img_name, img_ext)
             
