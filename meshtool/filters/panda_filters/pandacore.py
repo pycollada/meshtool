@@ -454,10 +454,12 @@ def recurseScene(curnode, scene_members, data_cache, M, texture_cache):
                     mat = materialnodesbysymbol.get(prim.material)
                     matstate = None
                     if mat is not None:
-                        matstate = data_cache['material2state'].get(mat)
+                        matstate = data_cache['material2state'].get(mat.target)
                         if matstate is None:
                             matstate = getStateFromMaterial(mat.target, texture_cache)
-                            data_cache['material2state'][mat] = matstate
+                            if geom.double_sided:
+                                matstate = matstate.addAttrib(CullFaceAttrib.make(CullFaceAttrib.MCullNone))
+                            data_cache['material2state'][mat.target] = matstate
                     
                     mat4 = Mat4(*M.T.flatten().tolist())
                     
