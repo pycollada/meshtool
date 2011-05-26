@@ -108,10 +108,11 @@ def combinePrimitives(mesh):
                     for set in range(len(concat_arrays[semantic])):
                         components, concat_array = concat_arrays[semantic][set]
                         
-                        source_name = "%s-%s-%s" % (geometry.id, semantic.lower(), set)
+                        base_source_name = "%s-%s-%s" % (geometry.id, semantic.lower(), set)
+                        source_name = base_source_name
                         ct = 0
                         while source_name in geometry.sourceById:
-                            source_name += '-%d' % ct
+                            source_name = '%s-%d' % (base_source_name, ct)
                             ct += 1
                             
                         new_src = collada.source.FloatSource(source_name, concat_array, components)
