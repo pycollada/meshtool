@@ -4,28 +4,45 @@ from meshtool.filters.base_filters import *
 import collada
 import numpy
 
+def getSemanticCount(inp):
+    inpct = {}
+    for srctup in inp:
+        if srctup[1] not in inpct:
+            inpct[srctup[1]] = 0
+        inpct[srctup[1]] += 1
+    return inpct
+
+def canMergeInputs(inp1, inp2):
+    inp1ct = getSemanticCount(inp1)
+    inp2ct = getSemanticCount(inp2)
+    return inp1ct == inp2ct
+
 def combinePrimitives(mesh):
+    
+    # first lets make a list of all the times each geometry is instantiated
+    all_instantiations = {}
+    for geometry in mesh.geometries:
+        all_instantiations[geometry.id] = []
+    for scene in mesh.scenes:
+        nodes_to_check = []
+        nodes_to_check.extend(scene.nodes)
+        while len(nodes_to_check) > 0:
+            curnode = nodes_to_check.pop()
+            for node in curnode.children:
+                if isinstance(node, collada.scene.Node):
+                    nodes_to_check.append(node)
+                elif isinstance(node, collada.scene.GeometryNode):
+                    all_instantiations[node.geometry.id].append(node)
+                elif isinstance(node, collada.scene.ControllerNode):
+                    all_instantiations[node.controller.geometry.id].append(node)
+    
     for geometry in mesh.geometries:
         
-        # first lets make a list of all the times the geometry is instantiated
-        instantiations = []
-        for scene in mesh.scenes:
-            nodes_to_check = []
-            nodes_to_check.extend(scene.nodes)
-            while len(nodes_to_check) > 0:
-                curnode = nodes_to_check.pop()
-                for node in curnode.children:
-                    if isinstance(node, collada.scene.Node):
-                        nodes_to_check.append(node)
-                    elif isinstance(node, collada.scene.GeometryNode):
-                        if node.geometry == geometry:
-                            instantiations.append(node)
-                    elif isinstance(node, collada.scene.ControllerNode):
-                        if node.controller.geometry == geometry:
-                            instantiations.append(node)
+        instantiations = all_instantiations[geometry.id]
         
         # now we will group the primitives into sets of primitives that get
-        # bound to the same material for each instantiation
+        # bound to the same material for each instantiation and have aligned
+        # inputs
         primitive_sets = []
         for primitive in geometry.primitives:
             if not isinstance(primitive, collada.triangleset.TriangleSet):
@@ -42,7 +59,7 @@ def combinePrimitives(mesh):
             
             matched = False
             for s in primitive_sets:
-                if s['bindings'] == bindings and input_list.getList() == s['inputs'].getList():
+                if s['bindings'] == bindings and canMergeInputs(input_list.getList(), s['inputs'].getList()):
                     matched = True
                     s['members'].append(primitive)
             if not matched:
@@ -56,30 +73,59 @@ def combinePrimitives(mesh):
             
             # okay, now we have a list of primitives within the geometry that are all
             # being bound to the same material whenever the geometry is instantiated
-            # so we can combine them into a single primitive
+            # and that have similar aligned inputs, so we can combine their source
+            # arrays into a single source and the primitives into a single primitive
             
-            input_list = s['inputs'].getList()
-            max_offset = 0
-            for offset, semantic, source, set in input_list:
-                if offset > max_offset:
-                    max_offset = offset
-                 
-            index_arrays = []
-            for i in range(max_offset+1):
-                index_arrays.append([])
-                
+            semantic_counts = getSemanticCount(s['inputs'].getList())
+            source_count = sum(semantic_counts.itervalues())
+
+            src_arrays = []
             for member in s['members']:
-                for i in range(max_offset+1):
-                    index_arrays[i].append(member.index[:,:,i])
-                
-            concat_arrays = []
-            for i in range(max_offset+1):
-                concat_arrays.append(numpy.concatenate(index_arrays[i]))
-                
-            combined_index = numpy.dstack(concat_arrays).flatten()
-            material_symbol = s['members'][0].material
-            combined_triset = geometry.createTriangleSet(combined_index, s['inputs'], material_symbol)
+                i = 0
+                for semantic in collada.source.InputList.semantics:
+                    for offset, semantic, srcid, set, srcobj in member.sources[semantic]:
+                        selected_data = srcobj.data[member.index[:,:,offset]]
+                        if len(src_arrays) == i:
+                            src_arrays.append((semantic, [selected_data], srcobj.components))
+                        else:
+                            src_arrays[i][1].append(selected_data)
+                        i += 1
+
+            concat_arrays = {}
+            for semantic, src_list, components in src_arrays:
+                if semantic not in concat_arrays:
+                    concat_arrays[semantic] = []
+                all_concat = numpy.concatenate(src_list)
+                all_concat.shape = -1
+                concat_arrays[semantic].append((components, all_concat))
+            src_arrays = None
             
+            inpl = collada.source.InputList()
+            index_arrays = []
+            offset = 0
+            for semantic in collada.source.InputList.semantics:
+                if semantic in concat_arrays:
+                    for set in range(len(concat_arrays[semantic])):
+                        components, concat_array = concat_arrays[semantic][set]
+                        
+                        source_name = "%s-%s-%s" % (geometry.id, semantic.lower(), set)
+                        ct = 0
+                        while source_name in geometry.sourceById:
+                            source_name += '-%d' % ct
+                            ct += 1
+                            
+                        new_src = collada.source.FloatSource(source_name, concat_array, components)
+                        geometry.sourceById[source_name] = new_src
+                        
+                        inpl.addInput(offset, semantic, '#%s' % source_name, set)
+                        index_arrays.append(numpy.arange(len(new_src)))
+                        
+                        offset += 1
+
+            combined_index = numpy.dstack(index_arrays).flatten()
+            material_symbol = s['members'][0].material
+            combined_triset = geometry.createTriangleSet(combined_index, inpl, material_symbol)
+
             #now find each primitive and delete it from the geometry
             todel = []
             for i, primitive in enumerate(geometry.primitives):
@@ -89,7 +135,7 @@ def combinePrimitives(mesh):
             todel.reverse()
             for i in todel:
                 del geometry.primitives[i]
-                
+
             geometry.primitives.append(combined_triset)
         
         # now lets go through the instantiations and delete any material nodes that
