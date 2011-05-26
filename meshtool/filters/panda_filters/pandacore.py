@@ -518,7 +518,6 @@ def setupPandaApp(mesh):
             node.setGeomState(0, renderstate)
         geomPath = rbcPath.attachNewNode(node)
         geomPath.setMat(mat4)
-        geomPath.setTransparency(TransparencyAttrib.MAlpha, 1)
         
     rbc.collect()
         
@@ -526,6 +525,7 @@ def setupPandaApp(mesh):
     base.disableMouse()
     attachLights(render)
     render.setShaderAuto()
+    render.setTransparency(TransparencyAttrib.MAlpha, 1)
 
     return p3dApp
 
