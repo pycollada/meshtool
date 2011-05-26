@@ -83,10 +83,9 @@ def packImages(mesh, img2texs, unique_images):
         width, height = pilimg.size
         rp.addRectangle(path, width, height)
     rp.pack()
-    
-    #round up to power of 2
-    width = int(math.pow(2, math.ceil(math.log(rp.width, 2))))
-    height = int(math.pow(2, math.ceil(math.log(rp.height, 2))))
+
+    width = rp.width
+    height = rp.height
     
     # don't want to create gigantic atlases
     # if this happens, split into two groups instead

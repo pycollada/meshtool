@@ -66,18 +66,9 @@ class RectPack:
         rects = [(key, self.rectangles[key][0], self.rectangles[key][1])
                  for key in self.rectangles]
         rects.sort(rectcmp)
-        area = 0
-        width = 0
-        height = 0
-        for rect in rects:
-            k, w, h = rect
-            area += w * h
-            if w > width: width = w
-            if h > height: height = h
-        side = int(math.sqrt(area)*1.1)
-        if side > width: width = side
-        if side > height: height = side
         done = False
+        width = 2
+        height = 2
         while not done:
             self.placements = {}
             locations = TreeNode(None, None, (0,0,width,height), None)
@@ -95,8 +86,10 @@ class RectPack:
                         self.height = rect[1] + rect[3]
                 done = True
             except CouldNotPack:
-                width = int(width * 1.1) + 1
-                height = int(height * 1.1) + 1
+                width *= 2
+                height *= 2
+        self.width = width
+        self.height = height
 
     def getPlacement(self, key):
         return self.placements[key]
