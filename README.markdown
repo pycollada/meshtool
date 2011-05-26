@@ -53,6 +53,8 @@ the same sources and scene material mapping (triangle sets only)
 have any
 * ``--strip_empty_geometry`` - Strips any empty geometry from the document and
 removes them from any scenes
+* ``--strip_unused_sources`` - Strips any source arrays from geometries if they
+aren't referenced by any primitives
 
 Mesh Simplification
 -------------------
