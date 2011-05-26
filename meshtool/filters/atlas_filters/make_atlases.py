@@ -123,7 +123,7 @@ def packImages(mesh, img2texs, unique_images):
             
             x_scale = w / width
             y_scale = h / height
-            x_offset = x / width
+            x_offset = x / (width-1)
             y_offset = 1.0 - (y+h)/height
 
             texarray[:,0] = texarray[:,0] * x_scale + x_offset
