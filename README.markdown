@@ -55,6 +55,8 @@ have any
 removes them from any scenes
 * ``--strip_unused_sources`` - Strips any source arrays from geometries if they
 aren't referenced by any primitives
+* ``--adjust_texcoords`` - Adjusts texture coordinates of triangles so that they
+are as close to the 0-1 range as possible
 
 Mesh Simplification
 -------------------
