@@ -52,7 +52,7 @@ def adjustTexcoords(mesh):
                     source_name = base_source_name
                     ct = 0
                     while source_name in geom.sourceById:
-                        source_name = '%s-%d' % (source_name, ct)
+                        source_name = '%s-%d' % (base_source_name, ct)
                         ct += 1
                     
                     new_tex_src = collada.source.FloatSource(source_name, texarray, ('S', 'T'))
