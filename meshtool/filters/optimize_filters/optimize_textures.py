@@ -5,6 +5,7 @@ import Image
 import sys
 from StringIO import StringIO
 import ImageFile
+import numpy
 
 def optimizeTextures(mesh):
     
@@ -60,6 +61,13 @@ def optimizeTextures(mesh):
         if pilimg.format == 'JPEG':
             #PIL image is already in JPG format so don't convert
             continue
+        
+        if 'A' in pilimg.getbands():
+            alpha = numpy.array(pilimg.split()[-1].getdata())
+            if not numpy.any(alpha < 255):
+                alpha = None
+                #this means that none of the pixels are using alpha, so convert to RGB
+                pilimg = pilimg.convert('RGB') 
         
         if 'A' in pilimg.getbands():
             #save textures with an alpha channel in PNG
