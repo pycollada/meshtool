@@ -47,7 +47,7 @@ def adjustTexcoords(mesh):
             inpl = collada.source.InputList()
             new_index = numpy.copy(prim.index)
             for offset, semantic, srcid, set in old_input_list:
-                if semantic == 'TEXCOORD' and set == '0':
+                if semantic == 'TEXCOORD' and (set == '0' or len(prim.texcoordset) == 1):
                     base_source_name = srcid[1:] + '-adjusted'
                     source_name = base_source_name
                     ct = 0
