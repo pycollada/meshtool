@@ -72,7 +72,7 @@ def getTexcoordToImgMapping(mesh):
     
     return all_texcoords
 
-def packImages(mesh, img2texs, unique_images):
+def packImages(mesh, img2texs, unique_images, image_scales):
     #if there aren't at least two images left, nothing to do
     if len(unique_images) < 2:
         return
@@ -100,13 +100,13 @@ def packImages(mesh, img2texs, unique_images):
             groups[curgroup][imgpath] = pilimg
             curgroup+=1
             if curgroup == 2: curgroup = 0
-        packImages(mesh, img2texs, groups[0])
-        packImages(mesh, img2texs, groups[1])
+        packImages(mesh, img2texs, groups[0], image_scales)
+        packImages(mesh, img2texs, groups[1], image_scales)
         return
     
     print "actually making atlas of size %dx%d with %d subimages referenced by %d texcoords" % \
         (width, height, len(unique_images), sum([len(img2texs[imgpath]) for imgpath in unique_images]))
-    atlasimg = Image.new('RGBA', (width, height))
+    atlasimg = Image.new('RGBA', (width, height), (0,0,0,255))
     
     to_del = {}
     for path, pilimg in unique_images.iteritems():
@@ -124,6 +124,13 @@ def packImages(mesh, img2texs, unique_images):
             y_scale = h / height
             x_offset = x / (width-1)
             y_offset = 1.0 - (y+h)/height
+
+            tile_x, tile_y = (float(i) for i in image_scales[path])
+
+            if tile_x > 1.0:
+                x_scale /= tile_x
+            if tile_y > 1.0:
+                y_scale /= tile_y
 
             texarray[:,0] = texarray[:,0] * x_scale + x_offset
             texarray[:,1] = texarray[:,1] * y_scale + y_offset
@@ -169,15 +176,18 @@ def packImages(mesh, img2texs, unique_images):
         
     imgs_deleted = [cimg for cimg in mesh.images if cimg.path in unique_images]
     mesh.images = [cimg for cimg in mesh.images if cimg.path not in unique_images]
-    newimgid = imgs_deleted[0].id + '-atlas'
-    newimgpath = './atlas'
     
-    while newimgid in mesh.images:
-        newimgid = newimgid + '-atlas'
-    while newimgpath + '.png' in [cimg.path for cimg in mesh.images]:
-        newimgpath = newimgpath + '-x'
+    baseimgid = imgs_deleted[0].id + '-atlas'
+    baseimgpath = './atlas'
+    newimgid = baseimgid
+    newimgpath = baseimgpath
+    ct = 0
+    while newimgid in mesh.images or newimgpath + '.png' in [cimg.path for cimg in mesh.images]:
+        newimgid = baseimgid + '-' + str(ct)
+        newimgpath = baseimgpath + '-' + str(ct)
+        ct += 1
+
     newimgpath = newimgpath + '.png'
-    
     newcimage = collada.material.CImage(newimgid, newimgpath, mesh)
     
     strbuf = StringIO()
@@ -196,10 +206,12 @@ def makeAtlases(mesh):
     # get a mapping from path to actual image, since theoretically you could have
     # the same image file in multiple image nodes
     unique_images = {}
+    image_scales = {}
     for cimg in mesh.images:
         path = cimg.path
         if path not in unique_images:
             unique_images[path] = cimg.pilimage
+            image_scales[path] = (1,1)
     
     # get a mapping from texture coordinates to all of the images they get bound to
     tex2img = getTexcoordToImgMapping(mesh)
@@ -213,14 +225,31 @@ def makeAtlases(mesh):
     imgs_to_delete = []
     for texset, imgpaths in tex2img.iteritems():
         
-        texarray = mesh.geometries[texset.geom_id] \
-                    .primitives[texset.prim_index] \
-                    .texcoordset[texset.texcoordset_index]
         valid_range = False
-        if numpy.min(texarray) >= -0.00001 and numpy.max(texarray) <= 1.00001:
-            valid_range = True
-        else:
-            print 'disqualifying because range is (%f, %f)' % (numpy.min(texarray), numpy.max(texarray))
+        if len(imgpaths) == 1:
+            texarray = mesh.geometries[texset.geom_id] \
+                        .primitives[texset.prim_index] \
+                        .texcoordset[texset.texcoordset_index]
+            
+            width, height = unique_images[imgpaths[0]].size
+            tile_x = int(numpy.ceil(numpy.max(texarray[:,0])))
+            tile_y = int(numpy.ceil(numpy.max(texarray[:,1])))
+            stretched_width = tile_x * width
+            stretched_height = tile_y * height
+            
+            #allow tiling of texcoords if the final tiled image is <= 1024x1024
+            if numpy.min(texarray) < 0.0:
+                valid_range = False
+            elif stretched_width > 1024.0 or stretched_height > 1024.0:
+                valid_range = False
+            else:
+                valid_range = True
+        
+            if valid_range:
+                scale_x, scale_y = image_scales[imgpaths[0]]
+                scale_x = max(scale_x, tile_x)
+                scale_y = max(scale_y, tile_y)
+                image_scales[imgpaths[0]] = (scale_x, scale_y)
         
         if len(imgpaths) > 1 or not valid_range:
             for imgpath in imgpaths:
@@ -228,7 +257,7 @@ def makeAtlases(mesh):
                     imgs_to_delete.append(imgpath)
             texs_to_delete.append(texset)
     for imgpath, pilimg in unique_images.iteritems():
-        if max(pilimg.size) >= 1024 and imgpath not in imgs_to_delete:
+        if max(pilimg.size) > 1024 and imgpath not in imgs_to_delete:
             imgs_to_delete.append(imgpath)
     for imgpath in imgs_to_delete:
         for texset, imgpaths in tex2img.iteritems():
@@ -247,7 +276,16 @@ def makeAtlases(mesh):
             if imgpaths[0] == imgpath:
                 img2texs[imgpath].append(texset)
     
-    packImages(mesh, img2texs, unique_images)
+    for path, pilimg in unique_images.iteritems():
+        tile_x, tile_y = image_scales[path]
+        width, height = pilimg.size
+        if tile_x > 1 or tile_y > 1:
+            tiled_img = Image.new('RGBA', (width*tile_x, height*tile_y), (0,0,0,255))
+            for x in range(tile_x):
+                for y in range(tile_y):
+                    tiled_img.paste(pilimg, (x*width,y*height))
+            unique_images[path] = tiled_img
+    packImages(mesh, img2texs, unique_images, image_scales)
 
 def FilterGenerator():
     class MakeAtlasesFilter(OpFilter):
