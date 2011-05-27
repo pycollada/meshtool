@@ -35,6 +35,7 @@ registerModule('meshtool.filters.optimize_filters.generate_normals')
 registerModule('meshtool.filters.optimize_filters.save_mipmaps')
 registerModule('meshtool.filters.optimize_filters.optimize_textures')
 registerModule('meshtool.filters.optimize_filters.adjust_texcoords')
+registerModule('meshtool.filters.optimize_filters.normalize_indices')
 
 registerModule('meshtool.filters.atlas_filters.make_atlases')
 

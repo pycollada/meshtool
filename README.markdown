@@ -57,6 +57,8 @@ removes them from any scenes
 aren't referenced by any primitives
 * ``--adjust_texcoords`` - Adjusts texture coordinates of triangles so that they
 are as close to the 0-1 range as possible
+* ``--normalize_indices`` - Goes through all triangle sets, changing all index
+values to go from 1 to N, replacing sources to be size N
 
 Mesh Simplification
 -------------------
