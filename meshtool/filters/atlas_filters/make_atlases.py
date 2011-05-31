@@ -100,9 +100,13 @@ def packImages(mesh, img2texs, unique_images, image_scales):
             groups[curgroup][imgpath] = pilimg
             curgroup+=1
             if curgroup == 2: curgroup = 0
-        packImages(mesh, img2texs, groups[0], image_scales)
-        packImages(mesh, img2texs, groups[1], image_scales)
-        return
+        to_del = packImages(mesh, img2texs, groups[0], image_scales)
+        for geom, primlist in packImages(mesh, img2texs, groups[1], image_scales).iteritems():
+            if geom in to_del:
+                to_del[geom].extend(primlist)
+            else:
+                to_del[geom] = primlist
+        return to_del
     
     print "actually making atlas of size %dx%d with %d subimages referenced by %d texcoords" % \
         (width, height, len(unique_images), sum([len(img2texs[imgpath]) for imgpath in unique_images]))
@@ -169,10 +173,6 @@ def packImages(mesh, img2texs, unique_images, image_scales):
                 raise Exception("Unknown primitive type")
             
             geom.primitives.append(newprim)
-                        
-    for geom, primindices in to_del.iteritems():
-        for i in sorted(primindices, reverse=True):
-            del geom.primitives[i]
         
     imgs_deleted = [cimg for cimg in mesh.images if cimg.path in unique_images]
     mesh.images = [cimg for cimg in mesh.images if cimg.path not in unique_images]
@@ -201,6 +201,8 @@ def packImages(mesh, img2texs, unique_images, image_scales):
             if type(propval) is collada.material.Map:
                 if propval.sampler.surface.image in imgs_deleted:
                     propval.sampler.surface.image = newcimage
+                    
+    return to_del
 
 def makeAtlases(mesh):
     # get a mapping from path to actual image, since theoretically you could have
@@ -285,7 +287,11 @@ def makeAtlases(mesh):
                 for y in range(tile_y):
                     tiled_img.paste(pilimg, (x*width,y*height))
             unique_images[path] = tiled_img
-    packImages(mesh, img2texs, unique_images, image_scales)
+            
+    to_del = packImages(mesh, img2texs, unique_images, image_scales)
+    for geom, primindices in to_del.iteritems():
+        for i in sorted(primindices, reverse=True):
+            del geom.primitives[i]
 
 def FilterGenerator():
     class MakeAtlasesFilter(OpFilter):
