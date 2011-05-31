@@ -138,7 +138,7 @@ def packImages(mesh, img2texs, unique_images, image_scales):
             oldsources = prim.getInputList().getList()
             newsources = collada.source.InputList()
             for (offset, semantic, source, set) in oldsources:
-                if semantic == 'TEXCOORD' and int(set) == texset.texcoordset_index:
+                if semantic == 'TEXCOORD' and set is not None and int(set) == texset.texcoordset_index:
                     orig_source = source
                     i=0
                     while source[1:] in geom.sourceById:
