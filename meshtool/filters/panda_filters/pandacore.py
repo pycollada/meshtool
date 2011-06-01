@@ -530,36 +530,17 @@ def setupPandaApp(mesh):
     return p3dApp
 
 def getScreenshot(p3dApp):
+
+    p3dApp.taskMgr.step()
+    p3dApp.taskMgr.step()
+    pnmss = PNMImage()
+    p3dApp.win.getScreenshot(pnmss)
+    resulting_ss = StringStream()
+    pnmss.write(resulting_ss, "screenshot.png")
+    screenshot_buffer = resulting_ss.getData()
+    pilimage = Image.open(StringIO(screenshot_buffer))
+    pilimage.load()
     
-    def screenshotStep():
-        p3dApp.taskMgr.step()
-        p3dApp.taskMgr.step()
-        pnmss = PNMImage()
-        p3dApp.win.getScreenshot(pnmss)
-        resulting_ss = StringStream()
-        pnmss.write(resulting_ss, "screenshot.png")
-        screenshot_buffer = resulting_ss.getData()
-        pilimage = Image.open(StringIO(screenshot_buffer))
-        pilimage.load()
-        
-        #pnmimage will sometimes output as palette mode for 8-bit png so convert
-        pilimage = pilimage.convert('RGBA')
-        return pilimage
-    
-    base.setBackgroundColor(VBase4(1,1,1,1))
-    pilimage = screenshotStep()
-    
-    badalpha = pilimage.split()[-1]
-    badalpha = numpy.array(badalpha.getdata())
-    
-    base.setBackgroundColor(VBase4(0,0,0,0))
-    pilimage = screenshotStep()
-    nicealpha = pilimage.split()[-1]
-    
-    combined_alpha = numpy.array(nicealpha.getdata())
-    combined_alpha[badalpha < 255] = 255
-    nicealpha.putdata(combined_alpha)
-    
-    pilimage.putalpha(nicealpha)
-    
+    #pnmimage will sometimes output as palette mode for 8-bit png so convert
+    pilimage = pilimage.convert('RGBA')
     return pilimage
