@@ -100,13 +100,19 @@ def packImages(mesh, img2texs, unique_images, image_scales):
             groups[curgroup][imgpath] = pilimg
             curgroup+=1
             if curgroup == 2: curgroup = 0
-        to_del = packImages(mesh, img2texs, groups[0], image_scales)
-        for geom, primlist in packImages(mesh, img2texs, groups[1], image_scales).iteritems():
-            if geom in to_del:
-                to_del[geom].extend(primlist)
-            else:
-                to_del[geom] = primlist
-        return to_del
+        to_del1 = packImages(mesh, img2texs, groups[0], image_scales)
+        to_del2 = packImages(mesh, img2texs, groups[1], image_scales)
+        if to_del1 is None:
+            return to_del2
+        elif to_del2 is None:
+            return to_del1
+        else:
+            for geom, primlist in to_del2.iteritems():
+                if geom in to_del1:
+                    to_del1[geom].extend(primlist)
+                else:
+                    to_del1[geom] = primlist
+            return to_del1
     
     print "actually making atlas of size %dx%d with %d subimages referenced by %d texcoords" % \
         (width, height, len(unique_images), sum([len(img2texs[imgpath]) for imgpath in unique_images]))
@@ -289,9 +295,10 @@ def makeAtlases(mesh):
             unique_images[path] = tiled_img
             
     to_del = packImages(mesh, img2texs, unique_images, image_scales)
-    for geom, primindices in to_del.iteritems():
-        for i in sorted(primindices, reverse=True):
-            del geom.primitives[i]
+    if to_del is not None:
+        for geom, primindices in to_del.iteritems():
+            for i in sorted(primindices, reverse=True):
+                del geom.primitives[i]
 
 def FilterGenerator():
     class MakeAtlasesFilter(OpFilter):
