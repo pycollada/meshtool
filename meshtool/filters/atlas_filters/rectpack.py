@@ -56,7 +56,9 @@ def rectcmp(rect1, rect2):
     return 0
 
 class RectPack:
-    def __init__(self):
+    def __init__(self, maxwidth=None, maxheight=None):
+        self.maxwidth = maxwidth
+        self.maxheight = maxheight
         self.rectangles = {}
 
     def addRectangle(self, key, width, height):
@@ -66,30 +68,39 @@ class RectPack:
         rects = [(key, self.rectangles[key][0], self.rectangles[key][1])
                  for key in self.rectangles]
         rects.sort(rectcmp)
-        done = False
+        
+        #initial smallest pack could be two 1x1 rects, although not likely
         width = 2
         height = 2
+        
+        done = False
         while not done:
-            self.placements = {}
             locations = TreeNode(None, None, (0,0,width,height), None)
+            self.rejects = []
+            
             try:
                 for rect in rects:
                     if insert(locations, rect) is None:
-                        raise CouldNotPack()
-                self.width = 0
-                self.height = 0
-                for key, rect in locations:
-                    self.placements[key] = rect
-                    if rect[0] + rect[2] > self.width:
-                        self.width = rect[0] + rect[2]
-                    if rect[1] + rect[3] > self.height:
-                        self.height = rect[1] + rect[3]
+                        if self.maxwidth and width >= self.maxwidth or \
+                            self.maxheight and height >= self.maxheight:
+                            self.rejects.append(rect[0])
+                        else:
+                            raise CouldNotPack()
                 done = True
             except CouldNotPack:
                 width *= 2
                 height *= 2
+                
+        self.placements = {}
+        for key, rect in locations:
+            self.placements[key] = rect
         self.width = width
         self.height = height
+        
+        if len(self.rejects) > 0:
+            return False
+        else:
+            return True
 
     def getPlacement(self, key):
         return self.placements[key]

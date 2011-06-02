@@ -75,47 +75,52 @@ def getTexcoordToImgMapping(mesh):
     
     return all_texcoords
 
+def combinePacks(to_del1, to_del2):
+    if to_del1 is None:
+        return to_del2
+    elif to_del2 is None:
+        return to_del1
+    else:
+        for geom, primlist in to_del2.iteritems():
+            if geom in to_del1:
+                to_del1[geom].extend(primlist)
+            else:
+                to_del1[geom] = primlist
+        return to_del1
+
+def splitAlphas(unique_images):
+    group1 = dict(( (path, pilimg) for path, pilimg in unique_images.iteritems() if 'A' in pilimg.getbands() ))
+    group2 = dict(( (path, pilimg) for path, pilimg in unique_images.iteritems() if 'A' not in pilimg.getbands() ))
+
+    return group1, group2
+
 def packImages(mesh, img2texs, unique_images, image_scales):
     #if there aren't at least two images left, nothing to do
     if len(unique_images) < 2:
         return
     
     #okay, now we can start packing!
-    rp = RectPack()
+    rp = RectPack(MAX_IMAGE_DIMENSION, MAX_IMAGE_DIMENSION)
     for path, pilimg in unique_images.iteritems():
         width, height = pilimg.size
         rp.addRectangle(path, width, height)
-    rp.pack()
+    success = rp.pack()
 
+    if not success:
+        if len(rp.rejects) == len(unique_images):
+            #this means that nothing could be packed into the max size
+            # if not a single image can be packed into the max size
+            # then there's no point in continuing
+            return
+                
+        group1 = dict(( (path, pilimg) for path, pilimg in unique_images.iteritems() if path in rp.rejects ))
+        group2 = dict(( (path, pilimg) for path, pilimg in unique_images.iteritems() if path not in rp.rejects ))
+        
+        return combinePacks(packImages(mesh, img2texs, group1, image_scales),
+                    packImages(mesh, img2texs, group2, image_scales))
+    
     width = rp.width
     height = rp.height
-    
-    # don't want to create gigantic atlases
-    # if this happens, split into two groups instead
-    if width > MAX_IMAGE_DIMENSION or height > MAX_IMAGE_DIMENSION:
-        groups = {}
-        groups[0] = {}
-        groups[1] = {}
-        curgroup = 0
-        for (imgpath, pilimg) in sorted(unique_images.items(),
-                                        key=lambda tup: max(tup[1].size),
-                                        reverse=True):
-            groups[curgroup][imgpath] = pilimg
-            curgroup+=1
-            if curgroup == 2: curgroup = 0
-        to_del1 = packImages(mesh, img2texs, groups[0], image_scales)
-        to_del2 = packImages(mesh, img2texs, groups[1], image_scales)
-        if to_del1 is None:
-            return to_del2
-        elif to_del2 is None:
-            return to_del1
-        else:
-            for geom, primlist in to_del2.iteritems():
-                if geom in to_del1:
-                    to_del1[geom].extend(primlist)
-                else:
-                    to_del1[geom] = primlist
-            return to_del1
     
     print "actually making atlas of size %dx%d with %d subimages referenced by %d texcoords" % \
         (width, height, len(unique_images), sum([len(img2texs[imgpath]) for imgpath in unique_images]))
@@ -296,8 +301,10 @@ def makeAtlases(mesh):
                 for y in range(tile_y):
                     tiled_img.paste(pilimg, (x*width,y*height))
             unique_images[path] = tiled_img
-            
-    to_del = packImages(mesh, img2texs, unique_images, image_scales)
+    
+    group1, group2 = splitAlphas(unique_images)
+    to_del = combinePacks(packImages(mesh, img2texs, group1, image_scales),
+                packImages(mesh, img2texs, group2, image_scales))
     if to_del is not None:
         for geom, primindices in to_del.iteritems():
             for i in sorted(primindices, reverse=True):
