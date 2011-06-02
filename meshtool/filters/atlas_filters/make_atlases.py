@@ -14,6 +14,9 @@ from StringIO import StringIO
 import ImageFile
 ImageFile.MAXBLOCK = 1000000 # default is 64k
 
+#The maximum width or height of a texture
+MAX_IMAGE_DIMENSION = 4096
+
 class TexcoordSet(object):
     """Container class holding all the information needed to indentify and locate a
     single set of texture coordinates"""
@@ -89,7 +92,7 @@ def packImages(mesh, img2texs, unique_images, image_scales):
     
     # don't want to create gigantic atlases
     # if this happens, split into two groups instead
-    if width > 2048 or height > 2048:
+    if width > MAX_IMAGE_DIMENSION or height > MAX_IMAGE_DIMENSION:
         groups = {}
         groups[0] = {}
         groups[1] = {}
@@ -248,7 +251,7 @@ def makeAtlases(mesh):
             #allow tiling of texcoords if the final tiled image is <= 1024x1024
             if numpy.min(texarray) < 0.0:
                 valid_range = False
-            elif stretched_width > 1024.0 or stretched_height > 1024.0:
+            elif stretched_width > MAX_IMAGE_DIMENSION or stretched_height > MAX_IMAGE_DIMENSION:
                 valid_range = False
             else:
                 valid_range = True
@@ -265,7 +268,7 @@ def makeAtlases(mesh):
                     imgs_to_delete.append(imgpath)
             texs_to_delete.append(texset)
     for imgpath, pilimg in unique_images.iteritems():
-        if max(pilimg.size) > 1024 and imgpath not in imgs_to_delete:
+        if max(pilimg.size) > MAX_IMAGE_DIMENSION and imgpath not in imgs_to_delete:
             imgs_to_delete.append(imgpath)
     for imgpath in imgs_to_delete:
         for texset, imgpaths in tex2img.iteritems():
