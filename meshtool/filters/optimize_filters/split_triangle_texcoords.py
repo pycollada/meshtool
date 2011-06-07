@@ -79,12 +79,15 @@ def splitTriangleTexcoords(mesh):
                 distp1p3 = point_dist_d2(texarray, 0, 2)
                 distp2p3 = point_dist_d2(texarray, 1, 2)
                 
-                #get the point across from the longest edge, and the remaining 2 points
-                
                 #this should work without the hstack, but it's broken in python2.5
                 diffp12p13 = (distp1p2 > distp1p3)[:, numpy.newaxis]
+                diffp12p13 = numpy.hstack((diffp12p13, diffp12p13, diffp12p13))
                 diffp23p12 = (distp2p3 > distp1p2)[:, numpy.newaxis]
+                diffp23p12 = numpy.hstack((diffp23p12, diffp23p12, diffp23p12))
                 diffp23p13 = (distp2p3 > distp1p3)[:, numpy.newaxis]
+                diffp23p13 = numpy.hstack((diffp23p13, diffp23p13, diffp23p13))
+                
+                #get the point across from the longest edge, and the remaining 2 points
                 
                 across_long_pt = numpy.where(diffp12p13,
                                              numpy.where(diffp23p12, index2split[:,0,:], index2split[:,2,:]),
