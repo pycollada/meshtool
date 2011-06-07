@@ -43,6 +43,8 @@ registerModule('meshtool.filters.atlas_filters.make_atlases')
 registerModule('meshtool.filters.simplify_filters.simplify')
 registerModule('meshtool.filters.simplify_filters.load_pm')
 
+registerModule('meshtool.filters.meta_filters.full_optimizations')
+
 #Save filters last
 registerModule('meshtool.filters.panda_filters.save_screenshot')
 registerModule('meshtool.filters.panda_filters.save_rotate_screenshots')
