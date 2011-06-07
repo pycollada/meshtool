@@ -17,12 +17,6 @@ def point_dist_d2(arr, p1, p2):
 def splitTriangleTexcoords(mesh):
     global texdata, vertdata
     
-    notexcoords = 0
-    alreadyin = 0
-    succeeded = 0
-    gaveup = 0
-    gaveup_butatlasable = 0
-    
     #gets a mapping between texture coordinate set and the image paths it references
     tex2img = getTexcoordToImgMapping(mesh)
     
@@ -34,10 +28,12 @@ def splitTriangleTexcoords(mesh):
     
     for geom in mesh.geometries:
         
+        prims_to_delete = []
+        prims_to_add = []
+        
         for prim_index, prim in enumerate(geom.primitives):
             #only consider triangles that have texcoords
             if type(prim) is not collada.triangleset.TriangleSet or len(prim.texcoordset) < 1:
-                notexcoords += 1
                 continue
             
             #only using texcoord set 0 for now
@@ -47,7 +43,6 @@ def splitTriangleTexcoords(mesh):
              
             #we only want texcoords that go from 0 to N
             if numpy.min(texarray) <= 0.0 or numpy.max(texarray) <= 2.0:
-                alreadyin += 1
                 continue
             
             texset = TexcoordSet(geom.id, prim_index, 0)
@@ -73,10 +68,8 @@ def splitTriangleTexcoords(mesh):
             #array storing index to split
             index2split = orig_index[tris2keep_idx == False]
             
-            print
-            print 'starting', len(prim.index), len(index2split), numpy.max(texarray)
-            
             giveup = False
+            atlasable = False
             while len(index2split) > 0 and not giveup:
                                 
                 texarray = texdata[index2split[:,:,texindex]]
@@ -86,19 +79,12 @@ def splitTriangleTexcoords(mesh):
                 distp1p3 = point_dist_d2(texarray, 0, 2)
                 distp2p3 = point_dist_d2(texarray, 1, 2)
                 
-                c = (distp2p3 > distp1p2)[:,numpy.newaxis]
-                x = index2split[:,0,:]
-                y = index2split[:,2,:]
-                
                 #get the point across from the longest edge, and the remaining 2 points
                 
                 #this should work without the hstack, but it's broken in python2.5
                 diffp12p13 = (distp1p2 > distp1p3)[:, numpy.newaxis]
-                diffp12p13 = numpy.hstack((diffp12p13, diffp12p13, diffp12p13))
                 diffp23p12 = (distp2p3 > distp1p2)[:, numpy.newaxis]
-                diffp23p12 = numpy.hstack((diffp23p12, diffp23p12, diffp23p12))
                 diffp23p13 = (distp2p3 > distp1p3)[:, numpy.newaxis]
-                diffp23p13 = numpy.hstack((diffp23p13, diffp23p13, diffp23p13))
                 
                 across_long_pt = numpy.where(diffp12p13,
                                              numpy.where(diffp23p12, index2split[:,0,:], index2split[:,2,:]),
@@ -179,7 +165,6 @@ def splitTriangleTexcoords(mesh):
                 
                 texarray[:,:,0] -= xfloor[:, numpy.newaxis]
                 texarray[:,:,1] -= yfloor[:, numpy.newaxis]
-                print numpy.max(texarray)
                 
                 texdata = numpy.copy(texarray)
                 texdata.shape = (len(texarray)*3, 2)
@@ -195,7 +180,7 @@ def splitTriangleTexcoords(mesh):
                 #triangles that are done
                 new_index = orig_index[tris2keep_idx]
                 
-                if len(orig_index)-len(prim.index) > max(1000, len(prim.index) * 2):
+                if len(orig_index)-len(prim.index) > max(1000, len(prim.index) * 1.20):
                     
                     if len(tex2img[texset]) == 1:
                         width, height = unique_images[tex2img[texset][0]].size
@@ -204,30 +189,55 @@ def splitTriangleTexcoords(mesh):
                         stretched_width = tile_x * width
                         stretched_height = tile_y * height
                         if stretched_width <= MAX_IMAGE_DIMENSION and stretched_height <= MAX_IMAGE_DIMENSION:
-                            print 'FAILEDWITHHOPE at', len(orig_index), 'but still atlasable!'
-                            gaveup_butatlasable += 1
                             giveup = True
+                            atlasable = True
                         else:
-                            print 'FAILED (not atlasable) stopping because', len(orig_index), 'is bigger than 1000 or', len(prim.index)*2, numpy.max(texarray)
                             giveup = True
-                            gaveup += 1   
                     else:
-                        print 'FAILED stopping because', len(orig_index), 'is bigger than 1000 or', len(prim.index)*2, numpy.max(texarray)
                         giveup = True
-                        gaveup += 1
         
-            if not giveup:
-                print 'SUCCESS', len(prim.index), '->', len(orig_index)
-                succeeded += 1
-        
-             
-    print 'no tex coords:', notexcoords
-    print 'already in range (0,2):', alreadyin
-    print 'succeeded with limit:', succeeded
-    print 'gave up but atlasable:', gaveup_butatlasable
-    print 'gave up because hit limit:', gaveup   
-    import sys
-    sys.exit(0)
+            if not giveup or atlasable:
+                #rebuild the input list, changing the sources
+                old_input_list = prim.getInputList().getList()
+                inpl = collada.source.InputList()
+
+                for offset, semantic, srcid, set in old_input_list:
+                    if offset == vertindex:
+                        base_source_name = srcid[1:] + '-trisplit'
+                        source_name = base_source_name
+                        ct = 0
+                        while source_name in geom.sourceById:
+                            source_name = '%s-%d' % (base_source_name, ct)
+                            ct += 1
+                        vertdata.shape = -1
+                        new_vert_src = collada.source.FloatSource(source_name, vertdata, ('X','Y','Z'))
+                        geom.sourceById[source_name] = new_vert_src
+                        vertdata = None
+                        srcid = '#%s' % source_name
+                    elif offset == texindex:
+                        base_source_name = srcid[1:] + '-trisplit'
+                        source_name = base_source_name
+                        ct = 0
+                        while source_name in geom.sourceById:
+                            source_name = '%s-%d' % (base_source_name, ct)
+                            ct += 1
+                        texdata.shape = -1
+                        new_tex_src = collada.source.FloatSource(source_name, texdata, ('S', 'T'))
+                        geom.sourceById[source_name] = new_tex_src
+                        texdata = None
+                        srcid = '#%s' % source_name
+                    inpl.addInput(offset, semantic, srcid, set)
+     
+                orig_index.shape = -1
+                prims_to_add.append((orig_index, inpl, prim.material))
+                prims_to_delete.append(prim_index)
+                
+        #delete old ones and add new ones
+        for i in sorted(prims_to_delete, reverse=True):
+            del geom.primitives[i]
+        for new_index, inpl, mat in prims_to_add:
+            newtriset = geom.createTriangleSet(new_index, inpl, mat)
+            geom.primitives.append(newtriset) 
 
             
 def FilterGenerator():
