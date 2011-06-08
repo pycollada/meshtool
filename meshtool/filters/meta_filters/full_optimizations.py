@@ -3,7 +3,8 @@ from meshtool.filters.base_filters import *
 from meshtool.filters import factory
 
 def fullOptimizations(mesh):
-    optimize_filters = ['triangulate',
+    optimize_filters = [
+                        'triangulate',
                         'generate_normals',
                         'combine_effects',
                         'combine_materials',
@@ -17,7 +18,8 @@ def fullOptimizations(mesh):
                         'combine_materials',
                         'combine_primitives',
                         'strip_unused_sources',
-                        'optimize_textures']
+                        'optimize_textures'
+                        ]
     
     for filter in optimize_filters:
         inst = factory.getInstance(filter)
