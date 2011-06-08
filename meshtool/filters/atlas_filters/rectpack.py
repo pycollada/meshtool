@@ -29,18 +29,28 @@ def insert(node, rect):
     if node.key is not None: return None
     lx, ly, lw, lh = node.rect
     k, w, h = rect
-    dw = lw - w
-    dh = lh - h
+    x, y = 0, 0
+
+    #needs to be on power of 2 boundary
+    if lx % w != 0:
+        x = w - (lx % w)
+    if ly % h != 0:
+        y = h - (ly % h)
+
+    dw = lw - (x+w)
+    dh = lh - (y+h)
     if dw < 0 or dh < 0: return None
     if dw == 0 and dh == 0:
         node.key = k
+        node.rect = (lx+x, ly+y, w, h)
         return node
+
     if dw > dh:
-        node.left = TreeNode(None, None, (lx, ly, w, lh), None)
-        node.right = TreeNode(None, None, (lx + w, ly, lw - w, lh), None)
+        node.left = TreeNode(None, None, (lx, ly, x+w, lh), None)
+        node.right = TreeNode(None, None, (lx + x+w, ly, dw, lh), None)
     else:
-        node.left = TreeNode(None, None, (lx, ly, lw, h), None)
-        node.right = TreeNode(None, None, (lx, ly + h, lw, lh - h), None)
+        node.left = TreeNode(None, None, (lx, ly, lw, y+h), None)
+        node.right = TreeNode(None, None, (lx, ly + y+h, lw, dh), None)
     return insert(node.left, rect)
 
 # Sort by longer side then shorter side, descending
