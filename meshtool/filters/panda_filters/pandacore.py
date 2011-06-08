@@ -398,8 +398,11 @@ def attachLights(render):
     render.setLight(ambientLightNP)
 
 def getBaseNodePath(render):
-    globNode = GeomNode("collada")
-    return render.attachNewNode(globNode)
+    globNode = render.find("collada")
+    if globNode.isEmpty():
+        globNode = GeomNode("collada")
+        globNode = render.attachNewNode(globNode)
+    return globNode
 
 def ensureCameraAt(nodePath, cam):
     if nodePath.getNumChildren() > 0:

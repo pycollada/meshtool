@@ -1,6 +1,7 @@
 from direct.showbase.DirectObject import DirectObject
 from direct.task import Task
 import sys
+from math import pi
 
 class KeyboardMovement(DirectObject):
     def __init__(self):
@@ -62,3 +63,37 @@ class KeyboardMovement(DirectObject):
         self.cam_h += scale * h
         self.cam_p += scale * p
         self.cam_r += scale * r
+
+class MouseDrag(DirectObject):
+    def __init__(self, node):
+        
+        #The scale of the rotation relative to the mouse coords
+        self.SCALE = 0.2*pi * (180.0 / pi)
+        
+        self.node = node
+        self.accept("mouse1", self.down)
+        self.accept("mouse1-up", self.up)
+        
+    def down(self):
+        if not base.mouseWatcherNode.hasMouse():
+            return
+        
+        self.initialHpr = self.node.getHpr(base.cam)
+        self.initialMouseCoord = (base.mouseWatcherNode.getMouseX(), base.mouseWatcherNode.getMouseY())
+        taskMgr.add(self.drag, "drag")
+    
+    def drag(self, task):
+        if not base.mouseWatcherNode.hasMouse():
+            return Task.cont
+        
+        curMouseCoord = (base.mouseWatcherNode.getMouseX(), base.mouseWatcherNode.getMouseY())
+        delta = (curMouseCoord[0] - self.initialMouseCoord[0], curMouseCoord[1] - self.initialMouseCoord[1])
+        curHpr = (self.initialHpr[0] + delta[0] * self.SCALE,
+                  self.initialHpr[1] + delta[1] * self.SCALE,
+                  self.initialHpr[2])
+        
+        self.node.setHpr(base.cam, curHpr)
+        return Task.cont
+    
+    def up(self):
+        taskMgr.remove("drag")
