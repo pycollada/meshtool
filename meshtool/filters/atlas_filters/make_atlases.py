@@ -137,21 +137,31 @@ def packImages(mesh, img2texs, unique_images, image_scales):
             geom = mesh.geometries[texset.geom_id]
             prim = geom.primitives[texset.prim_index]
             texarray = numpy.copy(prim.texcoordset[texset.texcoordset_index])
-            
-            x_scale = w / width
-            y_scale = h / height
-            x_offset = x / (width-1)
-            y_offset = 1.0 - (y+h)/height
-
             tile_x, tile_y = (float(i) for i in image_scales[path])
-
+            
+            #this shrinks the texcoords to 0,1 range for a tiled image
             if tile_x > 1.0:
-                x_scale /= tile_x
+                texarray[:,0] = texarray[:,0] / tile_x
             if tile_y > 1.0:
-                y_scale /= tile_y
+                texarray[:,1] = texarray[:,1] / tile_y
+            
+            #this computes the coordinates of the lowest and highest texel
+            # if the texcoords go outside that range, rescale so they are inside
+            # suggestion by nvidia texture atlasing white paper
+            minx, maxx = numpy.min(texarray[:,0]), numpy.max(texarray[:,0])
+            miny, maxy = numpy.min(texarray[:,1]), numpy.max(texarray[:,1])
+            lowest_x = 0.5 / w
+            lowest_y = 0.5 / h
+            highest_x = 1.0 - lowest_x
+            highest_y = 1.0 - lowest_y
+            if minx < lowest_x or maxx > highest_x:
+                texarray[:,0] = texarray[:,0] * (highest_x - lowest_x) + lowest_x
+            if miny < lowest_y or maxy > highest_y:
+                texarray[:,1] = texarray[:,1] * (highest_y - lowest_y) + lowest_y
 
-            texarray[:,0] = texarray[:,0] * x_scale + x_offset
-            texarray[:,1] = texarray[:,1] * y_scale + y_offset
+            #this rescales the texcoords to map to the new atlas location
+            texarray[:,0] = texarray[:,0] * (w / width) + (x / (width-1))
+            texarray[:,1] = texarray[:,1] * (h / height) + (1.0 - (y+h)/height)
             
             oldsources = prim.getInputList().getList()
             newsources = collada.source.InputList()
@@ -300,7 +310,15 @@ def makeAtlases(mesh):
             for x in range(tile_x):
                 for y in range(tile_y):
                     tiled_img.paste(pilimg, (x*width,y*height))
-            unique_images[path] = tiled_img
+            pilimg = tiled_img
+        
+        #round down to power of 2
+        width = int(math.pow(2, int(math.log(width, 2))))
+        height = int(math.pow(2, int(math.log(height, 2))))
+        if (width, height) != pilimg.size:
+            pilimg = pilimg.resize((width, height), Image.ANTIALIAS)
+        
+        unique_images[path] = pilimg
     
     group1, group2 = splitAlphas(unique_images)
     to_del = combinePacks(packImages(mesh, img2texs, group1, image_scales),
