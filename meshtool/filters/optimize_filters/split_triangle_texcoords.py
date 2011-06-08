@@ -16,7 +16,7 @@ def point_dist_d2(arr, p1, p2):
 
 def splitTriangleTexcoords(mesh):
     global texdata, vertdata
-    
+
     #gets a mapping between texture coordinate set and the image paths it references
     tex2img = getTexcoordToImgMapping(mesh)
     
@@ -71,37 +71,10 @@ def splitTriangleTexcoords(mesh):
             giveup = False
             atlasable = False
             while len(index2split) > 0 and not giveup:
-                                
-                texarray = texdata[index2split[:,:,texindex]]
-                
-                #distance between points X and Y
-                distp1p2 = point_dist_d2(texarray, 0, 1)
-                distp1p3 = point_dist_d2(texarray, 0, 2)
-                distp2p3 = point_dist_d2(texarray, 1, 2)
-                
-                #this should work without the hstack, but it's broken in python2.5
-                diffp12p13 = (distp1p2 > distp1p3)[:, numpy.newaxis]
-                diffp12p13 = numpy.hstack((diffp12p13, diffp12p13, diffp12p13))
-                diffp23p12 = (distp2p3 > distp1p2)[:, numpy.newaxis]
-                diffp23p12 = numpy.hstack((diffp23p12, diffp23p12, diffp23p12))
-                diffp23p13 = (distp2p3 > distp1p3)[:, numpy.newaxis]
-                diffp23p13 = numpy.hstack((diffp23p13, diffp23p13, diffp23p13))
-                
-                #get the point across from the longest edge, and the remaining 2 points
-                
-                across_long_pt = numpy.where(diffp12p13,
-                                             numpy.where(diffp23p12, index2split[:,0,:], index2split[:,2,:]),
-                                             numpy.where(diffp23p13, index2split[:,0,:], index2split[:,1,:]))
-                
-                other_pt1 = numpy.where(diffp12p13,
-                                             numpy.where(diffp23p12, index2split[:,1,:], index2split[:,0,:]),
-                                             numpy.where(diffp23p13, index2split[:,1,:], index2split[:,2,:]))
-                
-                other_pt2 = numpy.where(diffp12p13,
-                                             numpy.where(diffp23p12, index2split[:,2,:], index2split[:,1,:]),
-                                             numpy.where(diffp23p13, index2split[:,2,:], index2split[:,0,:]))
-                
-                #next we have to calculate the point half way between the two points adjacent to the longest edge
+
+                pt0 = index2split[:,0,:]
+                pt1 = index2split[:,1,:]
+                pt2 = index2split[:,2,:]
                 
                 def halfway_between(pt1, pt2):
                     global texdata, vertdata
@@ -127,23 +100,23 @@ def splitTriangleTexcoords(mesh):
                     
                     return halfway_pt
                     
-                halfway_pt1_pt2 = halfway_between(other_pt1, other_pt2)
-                halfway_long_pt1 = halfway_between(across_long_pt, other_pt1)
-                halfway_long_pt2 = halfway_between(across_long_pt, other_pt2)
+                halfway_pt0_pt1 = halfway_between(pt0, pt1)
+                halfway_pt0_pt2 = halfway_between(pt0, pt2)
+                halfway_pt1_pt2 = halfway_between(pt1, pt2)
                 
-                #now we have 6 points, the original 3 plus the point halfway between each of the points
+                #now we have 6 points, the original 3 plus the points halfway between each of the points
                 # so we can now construct four triangles, splitting the original triangle into 4 pieces
                 
-                tris1 = numpy.dstack((across_long_pt, halfway_long_pt1, halfway_long_pt2))
+                tris1 = numpy.dstack((pt0, halfway_pt0_pt1, halfway_pt0_pt2))
                 tris1 = numpy.swapaxes(tris1, 1, 2)
                 
-                tris2 = numpy.dstack((other_pt1, halfway_long_pt1, halfway_pt1_pt2))
+                tris2 = numpy.dstack((pt1, halfway_pt0_pt1, halfway_pt1_pt2))
                 tris2 = numpy.swapaxes(tris2, 1, 2)
                 
-                tris3 = numpy.dstack((other_pt2, halfway_long_pt2, halfway_pt1_pt2))
+                tris3 = numpy.dstack((pt2, halfway_pt0_pt2, halfway_pt1_pt2))
                 tris3 = numpy.swapaxes(tris3, 1, 2)
                 
-                tris4 = numpy.dstack((halfway_long_pt1, halfway_long_pt2, halfway_pt1_pt2))
+                tris4 = numpy.dstack((halfway_pt0_pt1, halfway_pt0_pt2, halfway_pt1_pt2))
                 tris4 = numpy.swapaxes(tris4, 1, 2)
                 
                 #this is all of the index data now - the index that we didnt have to split plus the resulting split indices
@@ -240,6 +213,8 @@ def splitTriangleTexcoords(mesh):
             del geom.primitives[i]
         for new_index, inpl, mat in prims_to_add:
             newtriset = geom.createTriangleSet(new_index, inpl, mat)
+            #newtriset.generateNormals()
+            #newtriset._recreateXmlNode()
             geom.primitives.append(newtriset) 
 
             
