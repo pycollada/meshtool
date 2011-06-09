@@ -110,13 +110,13 @@ def splitTriangleTexcoords(mesh):
                 tris1 = numpy.dstack((pt0, halfway_pt0_pt1, halfway_pt0_pt2))
                 tris1 = numpy.swapaxes(tris1, 1, 2)
                 
-                tris2 = numpy.dstack((pt1, halfway_pt0_pt1, halfway_pt1_pt2))
+                tris2 = numpy.dstack((pt1, halfway_pt1_pt2, halfway_pt0_pt1))
                 tris2 = numpy.swapaxes(tris2, 1, 2)
                 
                 tris3 = numpy.dstack((pt2, halfway_pt0_pt2, halfway_pt1_pt2))
                 tris3 = numpy.swapaxes(tris3, 1, 2)
                 
-                tris4 = numpy.dstack((halfway_pt0_pt1, halfway_pt0_pt2, halfway_pt1_pt2))
+                tris4 = numpy.dstack((halfway_pt0_pt1, halfway_pt1_pt2, halfway_pt0_pt2))
                 tris4 = numpy.swapaxes(tris4, 1, 2)
                 
                 #this is all of the index data now - the index that we didnt have to split plus the resulting split indices
