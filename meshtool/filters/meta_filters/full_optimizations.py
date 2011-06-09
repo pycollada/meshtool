@@ -17,6 +17,7 @@ def fullOptimizations(mesh):
                         'combine_effects',
                         'combine_materials',
                         'combine_primitives',
+                        'optimize_sources',
                         'strip_unused_sources',
                         'optimize_textures'
                         ]

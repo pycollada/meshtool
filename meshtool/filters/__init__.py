@@ -37,6 +37,7 @@ registerModule('meshtool.filters.optimize_filters.optimize_textures')
 registerModule('meshtool.filters.optimize_filters.adjust_texcoords')
 registerModule('meshtool.filters.optimize_filters.normalize_indices')
 registerModule('meshtool.filters.optimize_filters.split_triangle_texcoords')
+registerModule('meshtool.filters.optimize_filters.optimize_sources')
 
 registerModule('meshtool.filters.atlas_filters.make_atlases')
 
