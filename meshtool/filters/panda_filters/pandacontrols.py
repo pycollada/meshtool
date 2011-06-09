@@ -1,5 +1,6 @@
 from direct.showbase.DirectObject import DirectObject
 from direct.task import Task
+from panda3d.core import Vec3, Quat
 import sys
 from math import pi
 
@@ -68,7 +69,7 @@ class MouseDrag(DirectObject):
     def __init__(self, node):
         
         #The scale of the rotation relative to the mouse coords
-        self.SCALE = 0.2*pi * (180.0 / pi)
+        self.SCALE = 0.4*pi * (180.0 / pi)
         
         self.node = node
         self.accept("mouse1", self.down)
@@ -77,9 +78,10 @@ class MouseDrag(DirectObject):
     def down(self):
         if not base.mouseWatcherNode.hasMouse():
             return
-        
-        self.initialHpr = self.node.getHpr(base.cam)
+
         self.initialMouseCoord = (base.mouseWatcherNode.getMouseX(), base.mouseWatcherNode.getMouseY())
+        self.initialQuat = self.node.getQuat(base.cam)
+        
         taskMgr.add(self.drag, "drag")
     
     def drag(self, task):
@@ -88,11 +90,15 @@ class MouseDrag(DirectObject):
         
         curMouseCoord = (base.mouseWatcherNode.getMouseX(), base.mouseWatcherNode.getMouseY())
         delta = (curMouseCoord[0] - self.initialMouseCoord[0], curMouseCoord[1] - self.initialMouseCoord[1])
-        curHpr = (self.initialHpr[0] + delta[0] * self.SCALE,
-                  self.initialHpr[1] + delta[1] * self.SCALE,
-                  self.initialHpr[2])
         
-        self.node.setHpr(base.cam, curHpr)
+        xQuat = Quat()
+        xQuat.setFromAxisAngle(delta[0] * self.SCALE, Vec3(0,0,1))
+        
+        yQuat = Quat()
+        yQuat.setFromAxisAngle(delta[1] * self.SCALE * -1, Vec3(1,0,0))
+        
+        self.node.setQuat(base.cam, self.initialQuat * xQuat * yQuat)
+        
         return Task.cont
     
     def up(self):
