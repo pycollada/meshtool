@@ -103,3 +103,16 @@ class MouseDrag(DirectObject):
     
     def up(self):
         taskMgr.remove("drag")
+
+class MouseScaleZoom(DirectObject):
+    def __init__(self, node):
+        self.node = node
+        self.scale_increment = self.node.getScale() * 0.10
+        self.accept("wheel_up", self.up)
+        self.accept("wheel_down", self.down)
+    def up(self):
+        self.node.setScale(self.node.getScale() - self.scale_increment)
+        if self.node.getScale() < self.scale_increment:
+            self.node.setScale(self.scale_increment)
+    def down(self):
+        self.node.setScale(self.node.getScale() + self.scale_increment)

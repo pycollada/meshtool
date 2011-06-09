@@ -2,13 +2,14 @@ from meshtool.args import *
 from meshtool.filters.base_filters import *
 
 from pandacore import setupPandaApp, getBaseNodePath
-from pandacontrols import KeyboardMovement, MouseDrag
+from pandacontrols import KeyboardMovement, MouseDrag, MouseScaleZoom
 
 def runViewer(mesh):
     p3dApp = setupPandaApp(mesh)
     p3dApp.render.analyze()
     KeyboardMovement()
     MouseDrag(getBaseNodePath(p3dApp.render))
+    MouseScaleZoom(getBaseNodePath(p3dApp.render))
     p3dApp.run()
 
 def FilterGenerator():
