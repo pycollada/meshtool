@@ -404,6 +404,10 @@ def getBaseNodePath(render):
         globNode = render.attachNewNode(globNode)
     return globNode
 
+def destroyScene(render):
+    globNode = getBaseNodePath(render)
+    globNode.removeNode()
+
 def ensureCameraAt(nodePath, cam):
     if nodePath.getNumChildren() > 0:
         boundingSphere = nodePath.getBounds()
@@ -538,6 +542,7 @@ def getScreenshot(p3dApp):
     p3dApp.taskMgr.step()
     pnmss = PNMImage()
     p3dApp.win.getScreenshot(pnmss)
+    destroyScene(p3dApp.render)
     resulting_ss = StringStream()
     pnmss.write(resulting_ss, "screenshot.png")
     screenshot_buffer = resulting_ss.getData()
