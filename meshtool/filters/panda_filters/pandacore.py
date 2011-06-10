@@ -411,14 +411,15 @@ def destroyScene(render):
 def ensureCameraAt(nodePath, cam):
     if nodePath.getNumChildren() > 0:
         boundingSphere = nodePath.getBounds()
-        scale = 5.0 / boundingSphere.getRadius()
-        
-        nodePath.setScale(scale, scale, scale)
-        boundingSphere = nodePath.getBounds()
-        nodePath.setPos(-1 * boundingSphere.getCenter().getX(),
-                        -1 * boundingSphere.getCenter().getY(),
-                        -1 * boundingSphere.getCenter().getZ())
-        nodePath.setHpr(0,0,0)
+        if not boundingSphere.isEmpty():
+            scale = 5.0 / boundingSphere.getRadius()
+            
+            nodePath.setScale(scale, scale, scale)
+            boundingSphere = nodePath.getBounds()
+            nodePath.setPos(-1 * boundingSphere.getCenter().getX(),
+                            -1 * boundingSphere.getCenter().getY(),
+                            -1 * boundingSphere.getCenter().getZ())
+            nodePath.setHpr(0,0,0)
        
     cam.setPos(15, -15, 1)
     cam.lookAt(0.0, 0.0, 0.0)
