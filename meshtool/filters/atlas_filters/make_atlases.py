@@ -220,11 +220,10 @@ def packImages(mesh, img2texs, unique_images, image_scales):
     mesh.images.append(newcimage)
     
     for effect in mesh.effects:
-        for prop in effect.supported:
-            propval = getattr(effect, prop)
-            if type(propval) is collada.material.Map:
-                if propval.sampler.surface.image in imgs_deleted:
-                    propval.sampler.surface.image = newcimage
+        for param in effect.params:
+            if type(param) is collada.material.Surface:
+                if param.image in imgs_deleted:
+                    param.image = newcimage
                     
     return to_del
 
@@ -306,7 +305,13 @@ def makeAtlases(mesh):
         tile_x, tile_y = image_scales[path]
         width, height = pilimg.size
         if tile_x > 1 or tile_y > 1:
-            tiled_img = Image.new('RGBA', (width*tile_x, height*tile_y), (0,0,0,255))
+            if 'A' in pilimg.getbands():
+                format = 'RGBA'
+                initval = (0,0,0,255)
+            else:
+                format = 'RGB'
+                initval = (0,0,0)
+            tiled_img = Image.new(format, (width*tile_x, height*tile_y), initval)
             for x in range(tile_x):
                 for y in range(tile_y):
                     tiled_img.paste(pilimg, (x*width,y*height))
