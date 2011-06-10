@@ -61,8 +61,15 @@ def splitTriangleTexcoords(mesh):
             #selector to find triangles that have texcoords already in range
             tris2keep_idx = numpy.apply_along_axis(numpy.sum, 1, numpy.apply_along_axis(numpy.sum, 2, texarray > 2.0)) == 0
             
-            #array that will store the current set of all index data
-            orig_index = numpy.copy(prim.index)
+            #create two new index arrays and copy the vert and uv indexes there so we can modify
+            new_indexes = numpy.zeros(( len(prim.index), 3, 2 ), prim.index.dtype)
+            num_indexes = prim.index.shape[2]
+            orig_index = numpy.dstack((prim.index, new_indexes))
+            orig_index[:,:,num_indexes] = orig_index[:,:,vertindex]
+            vertindex = num_indexes
+            orig_index[:,:,num_indexes+1] = orig_index[:,:,texindex]
+            texindex = num_indexes+1
+            
             #build an index for the new triangles, starting with the previous ones that don't need splitting
             new_index = orig_index[tris2keep_idx]
             #array storing index to split
@@ -178,7 +185,7 @@ def splitTriangleTexcoords(mesh):
                 inpl = collada.source.InputList()
 
                 for offset, semantic, srcid, set in old_input_list:
-                    if offset == vertindex:
+                    if semantic == 'VERTEX':
                         base_source_name = srcid[1:] + '-trisplit'
                         source_name = base_source_name
                         ct = 0
@@ -190,7 +197,8 @@ def splitTriangleTexcoords(mesh):
                         geom.sourceById[source_name] = new_vert_src
                         vertdata = None
                         srcid = '#%s' % source_name
-                    elif offset == texindex:
+                        offset = vertindex
+                    elif semantic == 'TEXCOORD' and (set is None or int(set) == 0):
                         base_source_name = srcid[1:] + '-trisplit'
                         source_name = base_source_name
                         ct = 0
@@ -202,6 +210,7 @@ def splitTriangleTexcoords(mesh):
                         geom.sourceById[source_name] = new_tex_src
                         texdata = None
                         srcid = '#%s' % source_name
+                        offset = texindex
                     inpl.addInput(offset, semantic, srcid, set)
      
                 orig_index.shape = -1
