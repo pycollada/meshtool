@@ -1,4 +1,8 @@
 import math
+import sys
+
+min_x_reject = 0
+min_y_reject = 0
 
 class CouldNotPack:
     pass
@@ -21,36 +25,79 @@ class TreeNode:
                 yield k
 
 def insert(node, rect):
+    global min_x_reject, min_y_reject
+    
     if node.left is not None:
-        newNode = insert(node.left, rect)
-        if newNode is not None:
-            return newNode
-        return insert(node.right, rect)
-    if node.key is not None: return None
-    lx, ly, lw, lh = node.rect
-    k, w, h = rect
-    x, y = 0, 0
+        #we have children so try to insert at one of the children
+        return insert(node.left, rect) or insert(node.right, rect)
 
-    #needs to be on power of 2 boundary
-    if lx % w != 0:
-        x = w - (lx % w)
-    if ly % h != 0:
-        y = h - (ly % h)
+    if node.key is not None:
+        #this node already has something in it
+        return None
+    
+    #the x,y,width,height of this current rectangle
+    this_x, this_y, this_width, this_height = node.rect
+    #the key, width and height of the rect trying to be inserted
+    insert_key, insert_width, insert_height = rect
+    #location to try and put the new rect
+    insert_x, insert_y = this_x, this_y
 
-    dw = lw - (x+w)
-    dh = lh - (y+h)
-    if dw < 0 or dh < 0: return None
-    if dw == 0 and dh == 0:
-        node.key = k
-        node.rect = (lx+x, ly+y, w, h)
+    if insert_width == this_width and insert_height == this_height:
+        node.key = insert_key
+        node.rect = (this_x, this_y, this_width, this_height)
         return node
 
-    if dw > dh:
-        node.left = TreeNode(None, None, (lx, ly, x+w, lh), None)
-        node.right = TreeNode(None, None, (lx + x+w, ly, dw, lh), None)
-    else:
-        node.left = TreeNode(None, None, (lx, ly, lw, y+h), None)
-        node.right = TreeNode(None, None, (lx, ly + y+h, lw, dh), None)
+    #to avoid bleeding in mipmaps, texture can't cross a power of 2 boundary
+    if insert_x % insert_width != 0:
+        insert_x += insert_width - (insert_x % insert_width)
+    if insert_y % insert_height != 0:
+        insert_y += insert_height - (insert_y % insert_height)
+
+    if insert_x + insert_width > this_x + this_width or \
+        insert_y + insert_height > this_y + this_height:
+        #after adjusting, we don't have room for you here
+        dx = insert_x + insert_width - this_x + this_width
+        dy = insert_y + insert_height - this_y + this_height
+        if dx < min_x_reject:
+            min_x_reject = dx
+        if dy < min_y_reject:
+            min_y_reject = dy
+        return None
+
+
+    #the following will create the four possible pairs of rectangles
+    # we could split this rectangle into
+
+    rects = []
+    
+    leftrect = (this_x, this_y, insert_x-this_x, this_height)
+    leftother = (insert_x, this_y, this_width-insert_width, this_height)
+    rects.append((leftrect, leftother))
+    
+    toprect = (this_x, this_y, this_width, insert_y-this_y)
+    topother = (this_x, insert_y, this_width, this_height-(insert_y-this_y))
+    rects.append((toprect, topother))
+    
+    rightrect = (insert_x+insert_width, this_y, this_width-insert_width-(insert_x-this_x), this_height)
+    rightother = (this_x, this_y, (insert_x-this_x)+insert_width, this_height)
+    rects.append((rightrect, rightother))
+    
+    bottomrect = (this_x, insert_y+insert_height, this_width, this_height-insert_height-(insert_y-this_y))
+    bottomother = (this_x, this_y, this_width, (insert_y-this_y)+insert_height)
+    rects.append((bottomrect, bottomother))
+    
+    #now find the rectangle pair that maximizes the 
+    max_area = -1
+    max_offset = 0
+    for i, (irect, other) in enumerate(rects):
+        x,y,width,height = irect
+        if width*height > max_area:
+            max_area = width*height
+            max_offset = i
+    
+    insert_rect, other_rect = rects[max_offset]
+    node.left = TreeNode(None, None, insert_rect, None)
+    node.right = TreeNode(None, None, other_rect, None)
     return insert(node.left, rect)
 
 # Sort by longer side then shorter side, descending
@@ -75,6 +122,8 @@ class RectPack:
         self.rectangles[key] = (width, height)
 
     def pack(self):
+        global min_x_reject, min_y_reject
+        
         rects = [(key, self.rectangles[key][0], self.rectangles[key][1])
                  for key in self.rectangles]
         rects.sort(rectcmp)
@@ -90,6 +139,8 @@ class RectPack:
             
             try:
                 for rect in rects:
+                    min_x_reject = sys.maxint
+                    min_y_reject = sys.maxint
                     if insert(locations, rect) is None:
                         if self.maxwidth and width >= self.maxwidth or \
                             self.maxheight and height >= self.maxheight:
@@ -98,8 +149,10 @@ class RectPack:
                             raise CouldNotPack()
                 done = True
             except CouldNotPack:
-                width *= 2
-                height *= 2
+                if min_x_reject < min_y_reject and width < self.maxwidth:
+                    width *= 2
+                elif (min_y_reject <= min_x_reject or width == self.maxwidth) and height < self.maxheight:
+                    height *= 2
                 
         self.placements = {}
         for key, rect in locations:
