@@ -316,6 +316,7 @@ def makeAtlases(mesh):
                 for y in range(tile_y):
                     tiled_img.paste(pilimg, (x*width,y*height))
             pilimg = tiled_img
+            width, height = pilimg.size
         
         #round down to power of 2
         width = int(math.pow(2, int(math.log(width, 2))))
