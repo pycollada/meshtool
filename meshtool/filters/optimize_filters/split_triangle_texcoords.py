@@ -2,7 +2,7 @@ from meshtool.args import *
 from meshtool.filters.base_filters import *
 import collada
 import numpy
-from meshtool.filters.atlas_filters.make_atlases import getTexcoordToImgMapping, TexcoordSet, MAX_IMAGE_DIMENSION
+from meshtool.filters.atlas_filters.make_atlases import getTexcoordToImgMapping, TexcoordSet, MAX_TILING_DIMENSION
 
 texdata = None
 vertdata = None
@@ -171,7 +171,7 @@ def splitTriangleTexcoords(mesh):
                         tile_y = int(numpy.ceil(numpy.max(texarray[:,1])))
                         stretched_width = tile_x * width
                         stretched_height = tile_y * height
-                        if stretched_width <= MAX_IMAGE_DIMENSION and stretched_height <= MAX_IMAGE_DIMENSION:
+                        if stretched_width <= MAX_TILING_DIMENSION and stretched_height <= MAX_TILING_DIMENSION:
                             giveup = True
                             atlasable = True
                         else:

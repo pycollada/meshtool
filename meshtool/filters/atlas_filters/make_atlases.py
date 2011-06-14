@@ -17,6 +17,7 @@ ImageFile.MAXBLOCK = 1000000 # default is 64k
 
 #The maximum width or height of a texture
 MAX_IMAGE_DIMENSION = 4096
+MAX_TILING_DIMENSION = 2048
 
 class TexcoordSet(object):
     """Container class holding all the information needed to indentify and locate a
@@ -267,10 +268,10 @@ def makeAtlases(mesh):
             stretched_width = tile_x * width
             stretched_height = tile_y * height
             
-            #allow tiling of texcoords if the final tiled image is <= 1024x1024
+            #allow tiling of texcoords if the final tiled image is <= MAX_TILING_DIMENSION
             if numpy.min(texarray) < 0.0:
                 valid_range = False
-            elif stretched_width > MAX_IMAGE_DIMENSION or stretched_height > MAX_IMAGE_DIMENSION:
+            elif stretched_width > MAX_TILING_DIMENSION or stretched_height > MAX_TILING_DIMENSION:
                 valid_range = False
             else:
                 valid_range = True
