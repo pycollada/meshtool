@@ -6,6 +6,7 @@ import math
 import collada
 import numpy
 import posixpath
+import itertools
 from StringIO import StringIO
 
 #Following is a workaround for setting quality=95, optimize=1 when encoding JPEG
@@ -46,7 +47,11 @@ def getTexcoordToImgMapping(mesh):
     
     #create a mapping between each texcoordset and the images they get bound to by traversing scenes
     for scene in mesh.scenes:
-        for boundgeom in scene.objects('geometry'):
+        for boundobj in itertools.chain(scene.objects('geometry'), scene.objects('controller')):
+            if isinstance(boundobj, collada.geometry.BoundGeometry):
+                boundgeom = boundobj
+            else:
+                boundgeom = boundobj.geometry
             geom_id = boundgeom.original.id
             for prim_index, boundprim in enumerate(boundgeom.primitives()):
                 if boundprim.material is not None:
