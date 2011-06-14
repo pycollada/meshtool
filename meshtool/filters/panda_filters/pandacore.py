@@ -405,8 +405,11 @@ def getBaseNodePath(render):
     return globNode
 
 def destroyScene(render):
-    globNode = getBaseNodePath(render)
-    globNode.removeNode()
+    base.taskMgr.stop()
+    for child in render.getChildren():
+        if child != base.camera:
+            child.removeNode()
+    base.graphicsEngine.removeAllWindows()
 
 def ensureCameraAt(nodePath, cam):
     if nodePath.getNumChildren() > 0:
