@@ -56,6 +56,7 @@ def getSceneInfo(mesh):
     num_draw_raw = 0
     num_draw_with_instances = 0
     num_draw_with_batching = 0
+    num_lines = 0
     
     geom_name_cache = {}
     material_cache = {}
@@ -76,20 +77,24 @@ def getSceneInfo(mesh):
             if boundprim.material not in material_cache:
                 num_draw_with_batching += 1
                 material_cache[boundprim.material] = None
-            if not isinstance(boundprim, collada.triangleset.BoundTriangleSet):
-                boundprim = boundprim.triangleset()
-            num_triangles += len(boundprim)
+            if isinstance(boundprim, collada.lineset.BoundLineSet):
+                num_lines += len(boundprim)
+            else:
+                if not isinstance(boundprim, collada.triangleset.BoundTriangleSet):
+                    boundprim = boundprim.triangleset()
+                num_triangles += len(boundprim)
         geom_name_cache[geom_id] = None
             
-    return (num_triangles, num_draw_raw, num_draw_with_instances, num_draw_with_batching)
+    return (num_triangles, num_draw_raw, num_draw_with_instances, num_draw_with_batching, num_lines)
 
 def getRenderInfo(mesh):
-    num_triangles, num_draw_raw, num_draw_with_instances, num_draw_with_batching = getSceneInfo(mesh)
+    num_triangles, num_draw_raw, num_draw_with_instances, num_draw_with_batching, num_lines = getSceneInfo(mesh)
     return {'texture_ram': getTextureRAM(mesh),
             'num_triangles': num_triangles,
             'num_draw_raw': num_draw_raw,
             'num_draw_with_instances': num_draw_with_instances,
-            'num_draw_with_batching': num_draw_with_batching}
+            'num_draw_with_batching': num_draw_with_batching,
+            'num_lines': num_lines}
 
 def printRenderInfo(mesh):
     render_info = getRenderInfo(mesh)
@@ -98,6 +103,7 @@ def printRenderInfo(mesh):
     print 'Raw number of draw calls: %d' % render_info['num_draw_raw']
     print 'Number of draw calls with instance batching: %d' % render_info['num_draw_with_instances']
     print 'Number of draw calls with instance and material batching: %d' % render_info['num_draw_with_batching']
+    print 'Number of lines: %d' % render_info['num_lines']
 
 def FilterGenerator():
     class PrintRenderInfoFilter(OpFilter):
