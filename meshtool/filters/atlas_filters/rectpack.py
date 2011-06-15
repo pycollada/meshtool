@@ -1,9 +1,6 @@
 import math
 import sys
 
-min_x_reject = 0
-min_y_reject = 0
-
 class CouldNotPack:
     pass
 
@@ -24,9 +21,7 @@ class TreeNode:
             for k in self.right:
                 yield k
 
-def insert(node, rect):
-    global min_x_reject, min_y_reject
-    
+def insert(node, rect):   
     if node.left is not None:
         #we have children so try to insert at one of the children
         return insert(node.left, rect) or insert(node.right, rect)
@@ -56,12 +51,6 @@ def insert(node, rect):
     if insert_x + insert_width > this_x + this_width or \
         insert_y + insert_height > this_y + this_height:
         #after adjusting, we don't have room for you here
-        dx = insert_x + insert_width - this_x + this_width
-        dy = insert_y + insert_height - this_y + this_height
-        if dx < min_x_reject:
-            min_x_reject = dx
-        if dy < min_y_reject:
-            min_y_reject = dy
         return None
 
 
@@ -71,7 +60,7 @@ def insert(node, rect):
     rects = []
     
     leftrect = (this_x, this_y, insert_x-this_x, this_height)
-    leftother = (insert_x, this_y, this_width-insert_width, this_height)
+    leftother = (insert_x, this_y, this_width-(insert_x-this_x), this_height)
     rects.append((leftrect, leftother))
     
     toprect = (this_x, this_y, this_width, insert_y-this_y)
@@ -98,7 +87,7 @@ def insert(node, rect):
     insert_rect, other_rect = rects[max_offset]
     node.left = TreeNode(None, None, insert_rect, None)
     node.right = TreeNode(None, None, other_rect, None)
-    return insert(node.left, rect)
+    return insert(node.right, rect)
 
 # Sort by longer side then shorter side, descending
 def rectcmp(rect1, rect2):
@@ -135,28 +124,40 @@ class RectPack:
         done = False
         while not done:
             locations = TreeNode(None, None, (0,0,width,height), None)
-            self.rejects = []
-            
-            try:
-                for rect in rects:
-                    min_x_reject = sys.maxint
-                    min_y_reject = sys.maxint
-                    if insert(locations, rect) is None:
-                        if self.maxwidth and width >= self.maxwidth or \
-                            self.maxheight and height >= self.maxheight:
-                            self.rejects.append(rect[0])
-                        else:
-                            raise CouldNotPack()
+            rejects = []
+            for rect in rects:
+                if insert(locations, rect) is None:
+                    rejects.append(rect)
+            if len(rejects) == 0 or \
+                self.maxwidth and width >= self.maxwidth and \
+                self.maxheight and height >= self.maxheight:
                 done = True
-            except CouldNotPack:
-                if min_x_reject < min_y_reject and width < self.maxwidth:
-                    width *= 2
-                elif (min_y_reject <= min_x_reject or width == self.maxwidth) and height < self.maxheight:
-                    height *= 2
                 
-        self.placements = {}
-        for key, rect in locations:
-            self.placements[key] = rect
+            if not done:
+                minx = min((reject[1] for reject in rejects))
+                miny = min((reject[2] for reject in rejects))
+                totx = sum((reject[1] for reject in rejects))
+                toty = sum((reject[2] for reject in rejects))
+                
+                next_width = width
+                while width + minx > next_width:
+                    next_width *= 2
+                next_height = height
+                while height + miny > next_height:
+                    next_height *= 2
+
+                if (next_width - width < next_height - height or height >= self.maxheight) and next_width <= self.maxwidth:
+                    width = next_width
+                elif (next_height - height <= next_width - width or width >= self.maxwidth) and next_height <= self.maxheight:
+                    height = next_height
+                if width < minx:
+                    width = next_width
+                if height < miny:
+                    height = next_height
+        
+        self.rejects = [reject[0] for reject in rejects]
+        
+        self.placements = dict(locations)
         self.width = width
         self.height = height
         
