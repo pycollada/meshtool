@@ -4,6 +4,10 @@ import collada
 import numpy
 from meshtool.filters.atlas_filters.make_atlases import getTexcoordToImgMapping, TexcoordSet, MAX_TILING_DIMENSION
 
+#The maximum number of trianlges is the maximum of these two values
+MAX_TRIANGLE_INCREASE = 500
+MAX_TRIANGLE_MULTIPLIER = 1.10
+
 texdata = None
 vertdata = None
 
@@ -163,7 +167,7 @@ def splitTriangleTexcoords(mesh):
                 #triangles that are done
                 new_index = orig_index[tris2keep_idx]
                 
-                if len(orig_index)-len(prim.index) > max(1000, len(prim.index) * 1.20):
+                if len(orig_index)-len(prim.index) > max(MAX_TRIANGLE_INCREASE, len(prim.index) * MAX_TRIANGLE_MULTIPLIER):
                     
                     if len(tex2img[texset]) == 1:
                         width, height = unique_images[tex2img[texset][0]].size
@@ -212,7 +216,7 @@ def splitTriangleTexcoords(mesh):
                         srcid = '#%s' % source_name
                         offset = texindex
                     inpl.addInput(offset, semantic, srcid, set)
-     
+                
                 orig_index.shape = -1
                 prims_to_add.append((orig_index, inpl, prim.material))
                 prims_to_delete.append(prim_index)
@@ -222,9 +226,7 @@ def splitTriangleTexcoords(mesh):
             del geom.primitives[i]
         for new_index, inpl, mat in prims_to_add:
             newtriset = geom.createTriangleSet(new_index, inpl, mat)
-            #newtriset.generateNormals()
-            #newtriset._recreateXmlNode()
-            geom.primitives.append(newtriset) 
+            geom.primitives.append(newtriset)
 
             
 def FilterGenerator():
