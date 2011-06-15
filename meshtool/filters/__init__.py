@@ -21,6 +21,7 @@ registerModule('meshtool.filters.print_filters.print_json')
 registerModule('meshtool.filters.print_filters.print_info')
 registerModule('meshtool.filters.print_filters.print_instances')
 registerModule('meshtool.filters.print_filters.print_scene')
+registerModule('meshtool.filters.print_filters.print_render_info')
 
 registerModule('meshtool.filters.panda_filters.viewer')
 
