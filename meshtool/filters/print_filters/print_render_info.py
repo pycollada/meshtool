@@ -63,7 +63,7 @@ def getSceneInfo(mesh):
     
     scene = mesh.scene
     if scene is None:
-        return (0, 0, 0, 0)
+        return (0, 0, 0, 0, 0)
     for boundobj in itertools.chain(scene.objects('geometry'), scene.objects('controller')):
         if isinstance(boundobj, collada.geometry.BoundGeometry):
             boundgeom = boundobj
@@ -84,7 +84,7 @@ def getSceneInfo(mesh):
                     boundprim = boundprim.triangleset()
                 num_triangles += len(boundprim)
         geom_name_cache[geom_id] = None
-            
+
     return (num_triangles, num_draw_raw, num_draw_with_instances, num_draw_with_batching, num_lines)
 
 def getRenderInfo(mesh):
