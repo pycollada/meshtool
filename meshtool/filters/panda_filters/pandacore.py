@@ -220,14 +220,14 @@ def getPrimAndDataFromTri(triset, matstate):
     
     return (vdata, gprim)
 
-def textureFromData(image_data):
+def textureFromData(image_data, filename=""):
     tex = None
     
     if image_data:
         myTexture = Texture()
         
         myImage = PNMImage()
-        success = myImage.read(StringStream(image_data))
+        success = myImage.read(StringStream(image_data), filename)
         
         if success == 1:
             #PNMImage can handle most texture formats
@@ -271,6 +271,7 @@ def getTexture(color=None, alpha=None, texture_cache=None):
         if unique_id in texture_cache:
             return texture_cache[unique_id]
     
+    image_file = ""
     if alpha:
         im = pilFromData(alpha.sampler.surface.image.data)
         
@@ -292,10 +293,12 @@ def getTexture(color=None, alpha=None, texture_cache=None):
         newbuf = StringIO()
         newim.save(newbuf, 'PNG')
         image_data = newbuf.getvalue()
+        image_file = 'whatever.png'
     else:
+        image_file = posixpath.basename(color.sampler.surface.image.path)
         image_data = color.sampler.surface.image.data
     
-    tex = textureFromData(image_data)
+    tex = textureFromData(image_data, image_file)
 
     if texture_cache is not None:
         texture_cache[unique_id] = tex
