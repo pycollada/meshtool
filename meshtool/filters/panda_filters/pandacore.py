@@ -21,7 +21,7 @@ from panda3d.core import Character, PartGroup, CharacterJoint
 from panda3d.core import TransformBlend, TransformBlendTable, JointVertexTransform
 from panda3d.core import GeomVertexAnimationSpec, GeomVertexArrayFormat, InternalName
 from panda3d.core import AnimBundle, AnimGroup, AnimChannelMatrixXfmTable
-from panda3d.core import PTAFloat, CPTAFloat, AnimBundleNode
+from panda3d.core import PTAFloat, CPTAFloat, AnimBundleNode, DepthOffsetAttrib
 from direct.actor.Actor import Actor
 from panda3d.core import loadPrcFileData
 
@@ -220,32 +220,14 @@ def getPrimAndDataFromTri(triset, matstate):
     
     return (vdata, gprim)
 
-def getTexture(value, grayscale=False, texture_cache=None):
-
-    if texture_cache is not None:
-        unique_id = str(id(value.sampler.surface.image)) + '_' + str(id(grayscale))
-        if unique_id in texture_cache:
-            return texture_cache[unique_id]
-
-    image_data = value.sampler.surface.image.data
-    
-    if grayscale:
-        im = Image.open(StringIO(image_data))
-        im.load()
-        gray = ImageOps.grayscale(im)
-        alpha = Image.new('RGBA', im.size)
-        alpha.putalpha(gray)
-        newbuf = StringIO()
-        alpha.save(newbuf, 'PNG')
-        image_data = newbuf.getvalue()
-    
+def textureFromData(image_data):
     tex = None
     
     if image_data:
-        myTexture = Texture(value.sampler.surface.image.id)
+        myTexture = Texture()
         
         myImage = PNMImage()
-        success = myImage.read(StringStream(image_data), posixpath.basename(value.sampler.surface.image.path))
+        success = myImage.read(StringStream(image_data))
         
         if success == 1:
             #PNMImage can handle most texture formats
@@ -256,10 +238,79 @@ def getTexture(value, grayscale=False, texture_cache=None):
             
         if success != 0:
             tex = myTexture
+            
+    return tex
+
+def pilFromData(image_data):
+    try:
+        im = Image.open(StringIO(image_data))
+        im.load()
+    except IOError:
+        #PIL couldn't open, so try to read with panda3d which supports DDS:
+        im = None
+        tex = textureFromData(image_data)
+        if tex is not None:
+            outdata = tex.getRamImageAs('RGB').getData()
+            try:
+                im = Image.fromstring('RGB', (tex.getXSize(), tex.getYSize()), outdata)
+                im.load()
+            except IOError:
+                #Any problem with panda3d might generate an invalid image buffer, so don't convert this
+                im = None
+    return im
+
+def getTexture(color=None, alpha=None, texture_cache=None):
+
+    unique_id = ""
+    if color:
+        unique_id += str(id(color.sampler.surface.image))
+    if alpha:
+        unique_id += '_' + str(id(alpha.sampler.surface.image))
+
+    if texture_cache is not None:
+        if unique_id in texture_cache:
+            return texture_cache[unique_id]
+    
+    if alpha:
+        im = pilFromData(alpha.sampler.surface.image.data)
+        
+        gray = None
+        for i, band in enumerate(im.getbands()):
+            if band == 'A':
+                gray = im.split()[i]
+        if gray is None:
+            gray = ImageOps.grayscale(im)
+            
+        if color:
+            newim = pilFromData(color.sampler.surface.image.data)
+            if 'A' not in newim.getbands():
+                newim = newim.convert('RGBA')
+        else:
+            newim = Image.new('RGBA', im.size)
+        newim.putalpha(gray)
+        newim.save('/tmp/whatever.png')
+        newbuf = StringIO()
+        newim.save(newbuf, 'PNG')
+        image_data = newbuf.getvalue()
+    else:
+        image_data = color.sampler.surface.image.data
+    
+    tex = textureFromData(image_data)
 
     if texture_cache is not None:
         texture_cache[unique_id] = tex
     return tex
+
+def v4fromtuple(value):
+    val4 = value[3] if len(value) > 3 else 1.0
+    return VBase4(value[0], value[1], value[2], val4)
+
+def addTextureStage(texId, texMode, texAttr, tex):
+    if tex:
+        ts = TextureStage(texId)
+        ts.setMode(texMode)
+        texAttr = texAttr.addOnStage(ts, tex)
+    return texAttr
 
 def getStateFromMaterial(prim_material, texture_cache):
     state = RenderState.makeFullDefault()
@@ -267,75 +318,66 @@ def getStateFromMaterial(prim_material, texture_cache):
     mat = Material()
     texattr = TextureAttrib.makeAllOff()
     
+    hasDiffuse = False
     if prim_material and prim_material.effect:
-        for prop in prim_material.effect.supported:
-            value = getattr(prim_material.effect, prop)
-            if value is None:
-                continue
-            
-            if type(value) is tuple:
-                val4 = value[3] if len(value) > 3 else 1.0
-                value = VBase4(value[0], value[1], value[2], val4)
-            
-            if prop == 'emission':
-                if isinstance(value, collada.material.Map):
-                    myTexture = getTexture(value, grayscale=True, texture_cache=texture_cache)
-                    if myTexture:
-                        ts = TextureStage('tsEmiss')
-                        ts.setMode(TextureStage.MGlow)
-                        texattr = texattr.addOnStage(ts, myTexture)
-                else:
-                    mat.setEmission(value)
-            elif prop == 'ambient':
-                if isinstance(value, collada.material.Map):
-                    #panda3d doesn't seem to support this
-                    pass
-                else:
-                    mat.setAmbient(value)
-            elif prop == 'diffuse':
-                if isinstance(value, collada.material.Map):
-                    myTexture = getTexture(value, texture_cache=texture_cache)
-                    if myTexture:
-                        ts = TextureStage('tsDiff')
-                        ts.setMode(TextureStage.MModulate)
-                        texattr = texattr.addOnStage(ts, myTexture)
-                else:
-                    mat.setDiffuse(value)
-            elif prop == 'specular':
-                if isinstance(value, collada.material.Map):
-                    myTexture = getTexture(value, texture_cache=texture_cache)
-                    if myTexture:
-                        ts = TextureStage('tsSpec')
-                        ts.setMode(TextureStage.MGloss)
-                        texattr = texattr.addOnStage(ts, myTexture)
-                    mat.setSpecular(VBase4(0.1, 0.1, 0.1, 1.0))
-                else:
-                    mat.setSpecular(VBase4(0.3*value[0], 0.3*value[1], 0.3*value[2], value[3]))
-            elif prop == 'shininess':
-                #this sets a sane value for blinn shading
-                if value <= 1.0:
-                    if value < 0.01:
-                        value = 1.0
-                    value = value * 128.0
-                mat.setShininess(value)
-            elif prop == 'reflective':
-                pass
-            elif prop == 'reflectivity':
-                pass
-            elif prop == 'transparent':
-                pass
-            elif prop == 'transparency':
-                pass
+        
+        diffuse = getattr(prim_material.effect, 'diffuse')
+        transparent = getattr(prim_material.effect, 'transparent')
+        
+        if isinstance(diffuse, collada.material.Map) or isinstance(transparent, collada.material.Map):
+            diffuseMap = None
+            transparentMap = None
+            if isinstance(diffuse, collada.material.Map):
+                diffuseMap = diffuse
+            if isinstance(transparent, collada.material.Map):
+                transparentMap = transparent
+            if diffuseMap == transparentMap:
+                transparentMap = None
+                
+            diffuseTexture = getTexture(color=diffuseMap, alpha=transparentMap, texture_cache=texture_cache)
+            texattr = addTextureStage('tsDiff', TextureStage.MModulate, texattr, diffuseTexture)
+            hasDiffuse = True
 
-        if prim_material.effect.bumpmap:
-            myTexture = getTexture(prim_material.effect.bumpmap, texture_cache=texture_cache)
-            if myTexture:
-                ts = TextureStage('tsBump')
-                ts.setMode(TextureStage.MNormal)
-                texattr = texattr.addOnStage(ts, myTexture)
+        if type(diffuse) is tuple:
+            mat.setDiffuse(v4fromtuple(diffuse))
+        
+        emission = getattr(prim_material.effect, 'emission')
+        if isinstance(emission, collada.material.Map):
+            emissionTexture = getTexture(alpha=emission, texture_cache=texture_cache)
+            texattr = addTextureStage('tsEmiss', TextureStage.MGlow, texattr, emissionTexture)
+        elif type(emission) is tuple:
+            mat.setEmission(v4fromtuple(emission))
+        
+        ambient = getattr(prim_material.effect, 'ambient')
+        if type(ambient) is tuple:
+            mat.setAmbient(v4fromtuple(ambient))
+        
+        specular = getattr(prim_material.effect, 'specular')
+        if isinstance(specular, collada.material.Map):
+            specularTexture = getTexture(color=specular, texture_cache=texture_cache)
+            texattr = addTextureStage('tsSpec', TextureStage.MGloss, texattr, specularTexture)
+            mat.setSpecular(VBase4(0.1, 0.1, 0.1, 1.0))
+        elif type(specular) is tuple:
+            mat.setSpecular(v4fromtuple(specular))
+
+        shininess = getattr(prim_material.effect, 'shininess')
+        #this sets a sane value for blinn shading
+        if shininess <= 1.0:
+            if shininess < 0.01:
+                shininess = 1.0
+            shininess = shininess * 128.0
+        mat.setShininess(shininess)
+
+        bumpmap = getattr(prim_material.effect, 'bumpmap')
+        if isinstance(bumpmap, collada.material.Map):
+            bumpTexture = getTexture(color=bumpmap, texture_cache=texture_cache)
+            texattr = addTextureStage('tsBump', TextureStage.MNormal, texattr, bumpTexture)
 
         if prim_material.effect.double_sided:
             state = state.addAttrib(CullFaceAttrib.make(CullFaceAttrib.MCullNone))
+
+    if hasDiffuse:
+        state = state.addAttrib(DepthOffsetAttrib.make(1))
 
     state = state.addAttrib(MaterialAttrib.make(mat))
     state = state.addAttrib(texattr)
@@ -343,7 +385,7 @@ def getStateFromMaterial(prim_material, texture_cache):
     return state
 
 def setCameraAngle(ang):
-    base.camera.setPos(20.0 * sin(ang), -20.0 * cos(ang), 0)
+    base.camera.setPos(2000.0 * sin(ang), -2000.0 * cos(ang), 0)
     base.camera.lookAt(0.0, 0.0, 0.0)
 
 def spinCameraTask(task):
@@ -415,7 +457,7 @@ def ensureCameraAt(nodePath, cam):
     if nodePath.getNumChildren() > 0:
         boundingSphere = nodePath.getBounds()
         if not boundingSphere.isEmpty():
-            scale = 5.0 / boundingSphere.getRadius()
+            scale = 500 / boundingSphere.getRadius()
             
             nodePath.setScale(scale, scale, scale)
             boundingSphere = nodePath.getBounds()
@@ -424,7 +466,7 @@ def ensureCameraAt(nodePath, cam):
                             -1 * boundingSphere.getCenter().getZ())
             nodePath.setHpr(0,0,0)
        
-    cam.setPos(15, -15, 1)
+    cam.setPos(1500, -1500, 1)
     cam.lookAt(0.0, 0.0, 0.0)
 
 def getGeomFromPrim(prim, matstate):
@@ -536,7 +578,7 @@ def setupPandaApp(mesh):
     base.disableMouse()
     attachLights(render)
     render.setShaderAuto()
-    render.setTransparency(TransparencyAttrib.MAlpha, 1)
+    render.setTransparency(TransparencyAttrib.MDual, 1)
 
     return p3dApp
 

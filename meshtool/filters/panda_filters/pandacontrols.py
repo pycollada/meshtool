@@ -8,7 +8,9 @@ class KeyboardMovement(DirectObject):
     def __init__(self):
 
         #Controls how fast movement is        
-        self.SPEED = 10
+        self.POS_SPEED = 1000
+        #Controls how fast camera movement is
+        self.CAM_SPEED = 5
         
         #initial values for movement of the camera
         self.cam_pos_x = 0
@@ -46,14 +48,15 @@ class KeyboardMovement(DirectObject):
         dt = task.time - task.last
         task.last = task.time
         
-        scale = dt * self.SPEED
+        posscale = dt * self.POS_SPEED
+        camscale = dt * self.CAM_SPEED
         base.cam.setPosHpr(base.cam,
-                           scale * self.cam_pos_x,
-                           scale * self.cam_pos_y,
-                           scale * self.cam_pos_z,
-                           scale * self.cam_h,
-                           scale * self.cam_p,
-                           scale * self.cam_r)
+                           posscale * self.cam_pos_x,
+                           posscale * self.cam_pos_y,
+                           posscale * self.cam_pos_z,
+                           camscale * self.cam_h,
+                           camscale * self.cam_p,
+                           camscale * self.cam_r)
         return Task.cont
         
     def keypress(self, down, x, y, z, h, p, r):
