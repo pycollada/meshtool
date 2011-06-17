@@ -22,19 +22,20 @@ MAX_TILING_DIMENSION = 2048
 class TexcoordSet(object):
     """Container class holding all the information needed to indentify and locate a
     single set of texture coordinates"""
-    def __init__(self, geom_id, prim_index, texcoordset_index):
+    def __init__(self, geom_id, prim_index, texcoordset_index, setnum):
         self.geom_id = geom_id
         self.prim_index = prim_index
         self.texcoordset_index = texcoordset_index
+        self.setnum = setnum
     def __eq__(self, other):
         return self.geom_id == other.geom_id and \
                 self.prim_index == other.prim_index and \
-                self.texcoordset_index == other.texcoordset_index
+                self.setnum == other.setnum
     def __repr__(self):
-        return "<Texcoordset %s:%d:%d>" % (self.geom_id, self.prim_index, self.texcoordset_index)
+        return "<Texcoordset %s:%d:%d:%d>" % (self.geom_id, self.prim_index, self.texcoordset_index, self.setnum)
     def __str__(self): return self.__repr__()
     def __hash__(self):
-        return hash("%s_%s_%s" % (self.geom_id, str(self.prim_index), str(self.texcoordset_index)))
+        return hash("%s_%s_%s" % (self.geom_id, str(self.prim_index), str(self.setnum)))
 
 def getTexcoordToImgMapping(mesh):
 
@@ -42,9 +43,15 @@ def getTexcoordToImgMapping(mesh):
     all_texcoords = {}
     for geom in mesh.geometries:
         for prim_index, prim in enumerate(geom.primitives):
-            for texcoordset_index in range(len(prim.texcoordset)):
-                texset = TexcoordSet(geom.id, prim_index, texcoordset_index)
-                all_texcoords[texset] = []
+            inputs = prim.getInputList().getList()
+            texindex = 0
+            for offset, semantic, srcid, set in inputs:
+                if semantic == 'TEXCOORD':
+                    try: set = int(set)
+                    except (ValueError, TypeError): set = 0
+                    texset = TexcoordSet(geom.id, prim_index, texindex, set)
+                    texindex += 1
+                    all_texcoords[texset] = []
     
     #create a mapping between each texcoordset and the images they get bound to by traversing scenes
     for scene in mesh.scenes:
@@ -58,7 +65,7 @@ def getTexcoordToImgMapping(mesh):
                 if boundprim.material is not None:
                     effect = boundprim.material.effect
                     inputmap = boundprim.inputmap
-                    for prop in effect.supported:
+                    for prop in itertools.chain(effect.supported, ['bumpmap']):
                         propval = getattr(effect, prop)
                         if type(propval) is collada.material.Map:
                             if propval.texcoord in inputmap:
@@ -67,9 +74,9 @@ def getTexcoordToImgMapping(mesh):
                                 if not set: set = 0
                                 else:
                                     try: set = int(set)
-                                    except ValueError: set = 0
+                                    except (ValueError, TypeError): set = 0
                                 if semantic == 'TEXCOORD':
-                                    texset = TexcoordSet(geom_id, prim_index, set)
+                                    texset = TexcoordSet(geom_id, prim_index, -1, set)
                                     if texset in all_texcoords:
                                         if cimg.path not in all_texcoords[texset]:
                                             all_texcoords[texset].append(cimg.path)
