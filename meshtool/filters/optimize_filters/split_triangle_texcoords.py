@@ -49,7 +49,7 @@ def splitTriangleTexcoords(mesh):
             if numpy.min(texarray) <= 0.0 or numpy.max(texarray) <= 2.0:
                 continue
             
-            texset = TexcoordSet(geom.id, prim_index, 0)
+            texset = TexcoordSet(geom.id, prim_index, None, 0)
             #if the texset is not in the mapping, it means it never references an image
             if texset not in tex2img:
                 continue
