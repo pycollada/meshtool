@@ -107,3 +107,5 @@ def FilterGenerator():
             optimizeTextures(mesh)
             return mesh
     return OptimizeTexturesFilter()
+from meshtool.filters import factory
+factory.register(FilterGenerator().name, FilterGenerator)

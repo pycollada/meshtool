@@ -162,3 +162,5 @@ def FilterGenerator():
             combinePrimitives(mesh)
             return mesh
     return CombinePrimitivesFilter()
+from meshtool.filters import factory
+factory.register(FilterGenerator().name, FilterGenerator)

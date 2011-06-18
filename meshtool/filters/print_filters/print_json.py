@@ -52,3 +52,5 @@ def FilterGenerator():
             print getJSON(mesh)
             return mesh
     return PrintJsonFilter()
+from meshtool.filters import factory
+factory.register(FilterGenerator().name, FilterGenerator)

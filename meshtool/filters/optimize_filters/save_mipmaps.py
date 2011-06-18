@@ -133,3 +133,5 @@ def FilterGenerator():
             return mesh
         
     return SaveMipMapsFilter()
+from meshtool.filters import factory
+factory.register(FilterGenerator().name, FilterGenerator)

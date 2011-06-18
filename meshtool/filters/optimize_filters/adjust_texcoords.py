@@ -85,3 +85,5 @@ def FilterGenerator():
             adjustTexcoords(mesh)
             return mesh
     return AdjustTexcoordsFilter()
+from meshtool.filters import factory
+factory.register(FilterGenerator().name, FilterGenerator)

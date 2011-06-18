@@ -35,3 +35,5 @@ def FilterGenerator():
             combineEffects(mesh)
             return mesh
     return CombineEffectsFilter()
+from meshtool.filters import factory
+factory.register(FilterGenerator().name, FilterGenerator)

@@ -26,3 +26,5 @@ def FilterGenerator():
             printInstances(mesh)
             return mesh
     return PrintInstancesFilter()
+from meshtool.filters import factory
+factory.register(FilterGenerator().name, FilterGenerator)

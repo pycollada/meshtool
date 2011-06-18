@@ -113,3 +113,5 @@ def FilterGenerator():
             printRenderInfo(mesh)
             return mesh
     return PrintRenderInfoFilter()
+from meshtool.filters import factory
+factory.register(FilterGenerator().name, FilterGenerator)

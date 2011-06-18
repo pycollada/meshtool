@@ -18,3 +18,5 @@ def FilterGenerator():
                 
             return col
     return ColladaLoadFilter()
+from meshtool.filters import factory
+factory.register(FilterGenerator().name, FilterGenerator)

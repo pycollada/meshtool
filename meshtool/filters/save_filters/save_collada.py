@@ -12,3 +12,5 @@ def FilterGenerator():
             mesh.write(filename)
             return mesh
     return ColladaSaveFilter()
+from meshtool.filters import factory
+factory.register(FilterGenerator().name, FilterGenerator)

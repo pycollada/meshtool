@@ -89,3 +89,5 @@ def FilterGenerator():
                                      attributes, attribute_sources)
             return mesh
     return ColladaLoadPmFilter()
+from meshtool.filters import factory
+factory.register(FilterGenerator().name, FilterGenerator)

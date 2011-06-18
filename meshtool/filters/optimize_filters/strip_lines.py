@@ -15,3 +15,5 @@ def FilterGenerator():
             stripLines(mesh)
             return mesh
     return StripLinesFilter()
+from meshtool.filters import factory
+factory.register(FilterGenerator().name, FilterGenerator)

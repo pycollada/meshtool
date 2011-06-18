@@ -57,3 +57,5 @@ def FilterGenerator():
             
             return mesh
     return ColladaZipSaveFilter()
+from meshtool.filters import factory
+factory.register(FilterGenerator().name, FilterGenerator)

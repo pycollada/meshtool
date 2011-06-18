@@ -16,3 +16,5 @@ def FilterGenerator():
                 print t
             return mesh
     return PrintTexturesFilter()
+from meshtool.filters import factory
+factory.register(FilterGenerator().name, FilterGenerator)

@@ -66,3 +66,5 @@ def FilterGenerator():
             generateNormals(mesh)
             return mesh
     return GenerateNormalsFilter()
+from meshtool.filters import factory
+factory.register(FilterGenerator().name, FilterGenerator)

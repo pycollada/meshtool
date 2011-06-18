@@ -21,3 +21,5 @@ def FilterGenerator():
             return mesh
 
     return PandaViewer()
+from meshtool.filters import factory
+factory.register(FilterGenerator().name, FilterGenerator)
