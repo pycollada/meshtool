@@ -67,3 +67,5 @@ def FilterGenerator():
             print "Done."
             return mesh
     return ColladaSimplifyFilter()
+from meshtool.filters import factory
+factory.register(FilterGenerator().name, FilterGenerator)

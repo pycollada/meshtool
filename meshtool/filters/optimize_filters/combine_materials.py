@@ -48,3 +48,5 @@ def FilterGenerator():
             combineMaterials(mesh)
             return mesh
     return CombineMaterialsFilter()
+from meshtool.filters import factory
+factory.register(FilterGenerator().name, FilterGenerator)

@@ -237,3 +237,5 @@ def FilterGenerator():
             splitTriangleTexcoords(mesh)
             return mesh
     return SplitTriangleTexcoordsFilter()
+from meshtool.filters import factory
+factory.register(FilterGenerator().name, FilterGenerator)

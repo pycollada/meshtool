@@ -40,3 +40,5 @@ def FilterGenerator():
             stripEmptyGeometry(mesh)
             return mesh
     return StripEmptyGeometryFilter()
+from meshtool.filters import factory
+factory.register(FilterGenerator().name, FilterGenerator)

@@ -100,3 +100,5 @@ def FilterGenerator():
             optimizeSources(mesh)
             return mesh
     return OptimizeSourcesFilter()
+from meshtool.filters import factory
+factory.register(FilterGenerator().name, FilterGenerator)

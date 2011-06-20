@@ -24,3 +24,5 @@ def FilterGenerator():
             stripUnusedSources(mesh)
             return mesh
     return StripUnusedSourcesFilter()
+from meshtool.filters import factory
+factory.register(FilterGenerator().name, FilterGenerator)

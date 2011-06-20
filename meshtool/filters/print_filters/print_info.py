@@ -42,3 +42,5 @@ def FilterGenerator():
             printMeshInfo(mesh)
             return mesh
     return PrintInfoFilter()
+from meshtool.filters import factory
+factory.register(FilterGenerator().name, FilterGenerator)

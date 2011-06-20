@@ -23,3 +23,5 @@ def FilterGenerator():
             printScene(mesh)
             return mesh
     return PrintSceneFilter()
+from meshtool.filters import factory
+factory.register(FilterGenerator().name, FilterGenerator)

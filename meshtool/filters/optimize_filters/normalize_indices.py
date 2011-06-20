@@ -89,3 +89,5 @@ def FilterGenerator():
             normalizeIndices(mesh)
             return mesh
     return NormalizeIndicesFilter()
+from meshtool.filters import factory
+factory.register(FilterGenerator().name, FilterGenerator)

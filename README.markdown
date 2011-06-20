@@ -19,6 +19,18 @@ Save
 * ``--save_collada_zip file`` - Saves a collada file and textures in a zip file.
 Normalizes texture paths.
 
+Metafilters
+-----------
+* ``--full_optimizations`` - A meta filter that runs all optimizations. Performs
+these filters in this order: triangulate,
+generate_normals, combine_effects, combine_materials,
+combine_primitives, adjust_texcoords,
+optimize_textures, split_triangle_texcoords,
+normalize_indices, make_atlases, combine_effects,
+combine_materials, combine_primitives,
+optimize_sourcesstrip_unused_sources,
+optimize_textures
+
 Print
 -----
 * ``--print_info`` - Prints a bunch of information about the mesh to the console
@@ -27,6 +39,8 @@ format
 * ``--print_textures`` - Prints a list of the embedded images in the mesh
 * ``--print_instances`` - Prints geometry instances from the default scene
 * ``--print_scene`` - Prints the default scene tree
+* ``--print_render_info`` - Prints estimated number of batches, total number of
+triangles, and total texture memory
 
 View
 ----
@@ -59,6 +73,10 @@ aren't referenced by any primitives
 are as close to the 0-1 range as possible
 * ``--normalize_indices`` - Goes through all triangle sets, changing all index
 values to go from 1 to N, replacing sources to be size N
+* ``--split_triangle_texcoords`` - Splits triangles that span multiple texcoords into
+multiple triangles to better help texture atlasing
+* ``--optimize_sources`` - Compresses sources to unique values, updating
+triangleset indices
 
 Mesh Simplification
 -------------------

@@ -20,3 +20,5 @@ def FilterGenerator():
             triangulate(mesh)
             return mesh
     return TriangulateFilter()
+from meshtool.filters import factory
+factory.register(FilterGenerator().name, FilterGenerator)

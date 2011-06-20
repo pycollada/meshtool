@@ -36,8 +36,10 @@ def FilterGenerator():
                     'A meta filter that runs all optimizations. Performs these filters in this order: ' +
                     'triangulate, generate_normals, combine_effects, combine_materials, combine_primitives, ' + 
                     'adjust_texcoords, optimize_textures, split_triangle_texcoords, normalize_indices, ' + 
-                    'make_atlases, combine_effects, combine_materials, combine_primitives, strip_unused_sources, ' + 
-                    'optimize_textures')
+                    'make_atlases, combine_effects, combine_materials, combine_primitives, optimize_sources' + 
+                    'strip_unused_sources, optimize_textures')
         def apply(self, mesh):
             return fullOptimizations(mesh)
     return FullOptimizationsFilter()
+from meshtool.filters import factory
+factory.register(FilterGenerator().name, FilterGenerator)

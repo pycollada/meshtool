@@ -357,3 +357,5 @@ def FilterGenerator():
             makeAtlases(mesh)
             return mesh
     return MakeAtlasesFilter()
+from meshtool.filters import factory
+factory.register(FilterGenerator().name, FilterGenerator)

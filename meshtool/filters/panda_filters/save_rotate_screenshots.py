@@ -55,3 +55,5 @@ def FilterGenerator():
             return mesh
         
     return SaveScreenshotFilter()
+from meshtool.filters import factory
+factory.register(FilterGenerator().name, FilterGenerator)
