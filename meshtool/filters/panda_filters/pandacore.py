@@ -289,14 +289,23 @@ def getTexture(color=None, alpha=None, texture_cache=None):
         else:
             newim = Image.new('RGBA', im.size)
         newim.putalpha(gray)
-        newim.save('/tmp/whatever.png')
         newbuf = StringIO()
         newim.save(newbuf, 'PNG')
         image_data = newbuf.getvalue()
         image_file = 'whatever.png'
     else:
         image_file = posixpath.basename(color.sampler.surface.image.path)
-        image_data = color.sampler.surface.image.data
+        im = pilFromData(color.sampler.surface.image.data)
+        if im:
+            if 'A' in im.getbands():
+                im = im.convert('RGBA')
+            else:
+                im = im.convert('RGB')
+            newbuf = StringIO()
+            im.save(newbuf, 'PNG')
+            image_data = newbuf.getvalue()
+        else:
+            image_data = color.sampler.surface.image.data
     
     tex = textureFromData(image_data, image_file)
 
