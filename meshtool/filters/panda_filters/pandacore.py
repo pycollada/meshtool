@@ -335,6 +335,11 @@ def getStateFromMaterial(prim_material, texture_cache):
         
         diffuse = getattr(prim_material.effect, 'diffuse')
         transparent = getattr(prim_material.effect, 'transparent')
+        if isinstance(diffuse, collada.material.Map) and isinstance(transparent, collada.material.Map):
+            if diffuse.sampler.surface.image == transparent.sampler.surface.image:
+                #some exporters put the same map in the diffuse channel
+                # and the transparent channel when they don't really mean to
+                transparent = None
         
         if isinstance(diffuse, collada.material.Map) or isinstance(transparent, collada.material.Map):
             diffuseMap = None
