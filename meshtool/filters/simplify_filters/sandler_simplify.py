@@ -4,6 +4,7 @@ import inspect
 import numpy
 import networkx as nx
 from itertools import izip, chain, repeat
+import datetime
 
 def renderVerts(verts, idx):
     from meshtool.filters.panda_filters.pandacore import getVertexData, attachLights, ensureCameraAt
@@ -32,6 +33,13 @@ args, varargs, keywords, defaults = inspect.getargspec(numpy.unique)
 if 'return_inverse' not in args:
     numpy.unique = numpy.unique1d
 
+def timer():
+    begintime = datetime.datetime.now()
+    while True:
+        curtime = datetime.datetime.now()
+        yield (curtime-begintime)
+        begintime = curtime
+
 def getAdjacentFaces(vgraph, verts, facenum):
     faces = {}
     for i in range(len(verts)):
@@ -50,7 +58,9 @@ def sandler_simplify(mesh):
     all_vertices = []
     all_indices = []
     vertex_offset = 0
+    t = timer()
     
+    print 'building aggregated vertex and triangle list...',
     for boundgeom in mesh.scene.objects('geometry'):
         for boundprim in boundgeom.primitives():
             all_vertices.append(boundprim.vertex)
@@ -60,12 +70,18 @@ def sandler_simplify(mesh):
     all_vertices = numpy.concatenate(all_vertices)
     all_indices = numpy.concatenate(all_indices)
     
+    print next(t)
+    print 'uniqifying the list...',
     unique_data, index_map = numpy.unique(all_vertices.view([('',all_vertices.dtype)]*all_vertices.shape[1]), return_inverse=True)
     all_vertices = unique_data.view(all_vertices.dtype).reshape(-1,all_vertices.shape[1])
     all_indices = index_map[all_indices]
     
+    print next(t)
+    print 'building vertex vertices...',
     vertexgraph = nx.Graph()
     vertexgraph.add_nodes_from(xrange(len(all_vertices)))
+    print next(t)
+    print 'building vertex edges...',
     vertexgraph.add_edges_from(( (edge[0], edge[1], {facenum:True})
                                  for edge, facenum in
                                  izip(all_indices[:,(0,1)], xrange(len(all_indices))) ))
@@ -76,11 +92,17 @@ def sandler_simplify(mesh):
                                  for edge, facenum in
                                  izip(all_indices[:,(1,2)], xrange(len(all_indices))) ))
 
+    print next(t)
+    print 'building face vertices...',
     facegraph = nx.Graph()
     facegraph.add_nodes_from(( (i, {'vertices':[tri[0], tri[1], tri[2]]})
                                for i, tri in
                                enumerate(all_indices) ))
+    print next(t)
+    print 'building face edges...',
     facegraph.add_edges_from(getAdjacentEdges(vertexgraph, all_indices))
+    
+    print next(t)
 
 def FilterGenerator():
     class SandlerSimplificationFilter(OpFilter):
