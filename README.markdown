@@ -28,7 +28,13 @@ combine_primitives, adjust_texcoords,
 optimize_textures, split_triangle_texcoords,
 normalize_indices, make_atlases, combine_effects,
 combine_materials, combine_primitives,
-optimize_sourcesstrip_unused_sources,
+optimize_sources, strip_unused_sources,
+optimize_textures
+* ``--medium_optimizations`` - A meta filter that runs a safe, medium-level of
+optimizations. Performs these filters in this order:
+triangulate, generate_normals, combine_effects,
+combine_materials, combine_primitives,
+optimize_sources, strip_unused_sources,
 optimize_textures
 
 Print

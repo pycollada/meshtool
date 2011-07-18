@@ -42,6 +42,7 @@ import meshtool.filters.simplify_filters.load_pm
 import meshtool.filters.simplify_filters.sandler_simplify
 
 #Meta filters
+import meshtool.filters.meta_filters.medium_optimizations
 import meshtool.filters.meta_filters.full_optimizations
 
 #Save filters last
