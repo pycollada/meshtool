@@ -7,7 +7,7 @@ def generateNormals(mesh):
     for geom in mesh.geometries:
         prims_by_src = {}
         for prim in geom.primitives:
-            if type(prim) is collada.triangleset.TriangleSet and prim.normal is None:
+            if type(prim) is collada.triangleset.TriangleSet and prim.normal is None and len(prim) > 0:
                 vertex_source = prim.sources['VERTEX'][0][2]
                 if vertex_source in prims_by_src:
                     prims_by_src[vertex_source].append(prim)
