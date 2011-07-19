@@ -56,6 +56,16 @@ def calcPerimeter(pts):
     dz = pts[:,0,2]-pts[:,1,2]
     return numpy.sum(numpy.sqrt(dx*dx + dy*dy + dz*dz))
 
+def calcFitError(pts):
+    A = numpy.sum(pts[...,None] * pts[:,None,:], 0)
+    b = numpy.sum(pts, 0)
+    Z = A - numpy.outer(b,b)
+    eigvals, eigvecs = numpy.linalg.eig(Z)
+    n = eigvecs[numpy.argmin(eigvals)]
+    d = numpy.inner(-n, b)
+    import sys
+    sys.exit(0)
+
 def begin_operation():
     gc.disable()
 def end_operation():
@@ -129,15 +139,14 @@ def sandler_simplify(mesh):
     
     merge_priorities = []
     
-    print 'calculating perimeter...',
+    print 'calculating error...',
     begin_operation()
     for v1, v2 in facegraph.edges_iter():
         edges1 = facegraph.node[v1]['edges']
         edges2 = facegraph.node[v2]['edges']
         merged = numpy.array(merge_edges(edges1, edges2))
-        merged_pts = all_vertices[merged]
-        perimeter = calcPerimeter(merged_pts)
-        error = perimeter
+        error = calcPerimeter(all_vertices[merged])**2
+        error += calcFitError(all_vertices[numpy.unique(merged.flat)])
         merge_priorities.append((error, (v1, v2)))
     end_operation()
     print next(t)
