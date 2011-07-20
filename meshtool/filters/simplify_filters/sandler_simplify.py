@@ -6,34 +6,13 @@ import networkx as nx
 from itertools import izip, chain, repeat, imap
 import datetime
 import __builtin__
-from priority_queue_set import PriorityQueueSet
+import heapq
+from render_utils import renderVerts, renderCharts
 import gc
 
 if not 'set' in __builtin__.__dict__:
     import sets
     set = sets.Set
-
-def renderVerts(verts, idx):
-    from meshtool.filters.panda_filters.pandacore import getVertexData, attachLights, ensureCameraAt
-    from meshtool.filters.panda_filters.pandacontrols import KeyboardMovement, MouseDrag, MouseScaleZoom
-    from panda3d.core import GeomTriangles, Geom, GeomNode
-    from direct.showbase.ShowBase import ShowBase
-    vdata = getVertexData(verts, idx)
-    gprim = GeomTriangles(Geom.UHStatic)
-    gprim.addConsecutiveVertices(0, 3*len(idx))
-    gprim.closePrimitive()
-    pgeom = Geom(vdata)
-    pgeom.addPrimitive(gprim)
-    node = GeomNode("primitive")
-    node.addGeom(pgeom)
-    p3dApp = ShowBase()
-    #attachLights(render)
-    geomPath = render.attachNewNode(node)
-    geomPath.setRenderModeWireframe()
-    ensureCameraAt(geomPath, base.camera)
-    KeyboardMovement()
-    #render.setShaderAuto()
-    p3dApp.run()
 
 #after python2.5, uniqu1d was renamed to unique
 args, varargs, keywords, defaults = inspect.getargspec(numpy.unique)
@@ -50,6 +29,9 @@ def timer():
 def merge_edges(e1, e2):
     return list(set(imap(tuple,imap(sorted, chain(e1,e2)))))
          
+def distinct_vertices(edges):
+    return numpy.unique(numpy.array(edges))
+         
 def calcPerimeter(pts):
     dx = pts[:,0,0]-pts[:,1,0]
     dy = pts[:,0,1]-pts[:,1,1]
@@ -58,8 +40,6 @@ def calcPerimeter(pts):
 
 def array_mult(arr1, arr2):
     return arr1[:,0]*arr2[:,0] + arr1[:,1]*arr2[:,1] + arr2[:,2]*arr1[:,2]
-def array_dot(arr1, arr2):
-    return numpy.sqrt( array_mult(arr1, arr2) )
 
 def calcFitError(pts):
     # this computes the outer product of each vector
@@ -85,15 +65,6 @@ def calcFitError(pts):
     # final error is the square of the mean distance of each point to the plane
     mean_dist = numpy.mean(array_mult(n[None,:].repeat(len(pts), axis=0), pts) + d)
     Efit = mean_dist * mean_dist
-    
-    #print 'A', A
-    #print 'b', b
-    #print 'Z', Z
-    #print 'eigvals', eigvals
-    #print 'eigvecs', eigvecs
-    #print 'n', n
-    #print 'd', d
-    #print 'Efit', Efit
     
     return Efit
 
@@ -164,7 +135,7 @@ def sandler_simplify(mesh):
     for e in vertexgraph.edges_iter(data=True):
         adjacent_faces = e[2].keys()
         if len(adjacent_faces) == 2:
-            facegraph.add_edge(adjacent_faces[0], adjacent_faces[1], error=0.0)
+            facegraph.add_edge(adjacent_faces[0], adjacent_faces[1])
     end_operation()
     print next(t)
     
@@ -179,18 +150,91 @@ def sandler_simplify(mesh):
         error = calcPerimeter(all_vertices[merged])**2
         error += calcFitError(all_vertices[numpy.unique(merged.flat)])
         merge_priorities.append((error, (v1, v2)))
-        facegraph.edge[v1][v2]['error'] = error
     end_operation()
     print next(t)
         
     print 'creating priority queue...',
     begin_operation()
-    merge_priorities = PriorityQueueSet(merge_priorities)
+    heapq.heapify(merge_priorities)
     end_operation()
     print next(t)
+
+    #yaxis = []
     
+    print 'merging charts...',
+    begin_operation()
+    node_count = len(all_indices)
+    cum_error = 0
+    prev_count = 0
+    #skipped = []
     while len(merge_priorities) > 0:
-        print merge_priorities.pop_smallest()
+        (error, (v1, v2)) = heapq.heappop(merge_priorities)
+        
+        #this can happen if we have already merged one of these
+        if v1 not in facegraph or v2 not in facegraph:
+            continue
+        
+        # if the number of corners of the merged face is less than 3, disqualify it
+        # where a "corner" is defined as a vertex with at least 3 adjacent faces
+        combined_edges = merge_edges(facegraph.node[v1]['edges'], facegraph.node[v2]['edges'])
+        combined_vertices = distinct_vertices(combined_edges)
+        numcorners = 0
+        for v in combined_vertices:
+            adjacent = []
+            for (vv1, vv2, adj_dict) in vertexgraph.edges_iter(v, data=True):
+                adjacent.extend(adj_dict.keys())
+            adjacent = numpy.unique(numpy.array(adjacent))
+            numadj = len([a for a in adjacent if a != v1 and a != v2])
+            if numadj >= 3:
+                numcorners += 1
+        if numcorners < 3:
+            continue
+        
+        cum_error += error
+        prev_avg = cum_error / prev_count
+        #print error, prev_avg / error
+        if prev_avg / error < 0.02:
+            break
+        prev_count += 1
+        
+        #yaxis.append(error)
+        
+        #print 'graph size', len(facegraph), 'with', len(merge_priorities), 'merges left at', error
+        combined_tris = facegraph.node[v1]['tris'] + facegraph.node[v2]['tris']
+        
+        this_node = node_count
+        node_count += 1
+        
+        facegraph.add_node(this_node, {'tris':combined_tris, 'edges':combined_edges})
+        node_count += 1
+        
+        for adjacent_face in chain(facegraph.neighbors_iter(v1), facegraph.neighbors_iter(v2)):
+            if adjacent_face == v1 or adjacent_face == v2:
+                continue
+            edges_other = facegraph.node[adjacent_face]['edges']
+            merged = numpy.array(merge_edges(combined_edges, edges_other))
+            error = calcPerimeter(all_vertices[merged])**2
+            error += calcFitError(all_vertices[numpy.unique(merged.flat)])
+            heapq.heappush(merge_priorities, (error, (this_node, adjacent_face)))
+            facegraph.add_edge(adjacent_face, this_node)
+
+        facegraph.remove_node(v1)
+        facegraph.remove_node(v2)
+
+    end_operation()
+    print next(t)
+
+    #import matplotlib.pyplot as plt
+    #fig = plt.figure()
+    #ax = fig.add_subplot(111)
+    #ax.set_xscale('log')
+    #ax.scatter(range(len(yaxis)), yaxis)
+    #plt.show()
+    
+    print 'final number of faces =', len(facegraph)
+    print 'final number of connected components =', nx.algorithms.components.connected.number_connected_components(facegraph)
+    
+    renderCharts(facegraph, all_vertices)
 
 
 def FilterGenerator():
