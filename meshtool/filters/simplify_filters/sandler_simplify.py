@@ -6,7 +6,7 @@ import networkx as nx
 from itertools import izip, chain, repeat, imap
 import datetime
 import __builtin__
-import heapq
+from priority_queue_set import PriorityQueueSet
 import gc
 
 if not 'set' in __builtin__.__dict__:
@@ -56,15 +56,46 @@ def calcPerimeter(pts):
     dz = pts[:,0,2]-pts[:,1,2]
     return numpy.sum(numpy.sqrt(dx*dx + dy*dy + dz*dz))
 
+def array_mult(arr1, arr2):
+    return arr1[:,0]*arr2[:,0] + arr1[:,1]*arr2[:,1] + arr2[:,2]*arr1[:,2]
+def array_dot(arr1, arr2):
+    return numpy.sqrt( array_mult(arr1, arr2) )
+
 def calcFitError(pts):
+    # this computes the outer product of each vector
+    # in the array, element-wise, then sums up the 3x3
+    # matrices
+    #  A = sum{v_i * v_i^T} 
     A = numpy.sum(pts[...,None] * pts[:,None,:], 0)
-    b = numpy.sum(pts, 0)
-    Z = A - numpy.outer(b,b)
+    
+    # b = mean(v_i)
+    b = numpy.mean(pts, 0)
+
+    # Z = A - (b * b^T) / c
+    Z = A - numpy.outer(b,b) / len(pts)
+    
+    # n (normal of best fit plane) is the eigenvector
+    # corresponding to the minimum eigenvalue
     eigvals, eigvecs = numpy.linalg.eig(Z)
     n = eigvecs[numpy.argmin(eigvals)]
-    d = numpy.inner(-n, b)
-    import sys
-    sys.exit(0)
+    
+    # d (scalar offset of best fit plane) = -n^T * b / c
+    d = numpy.inner(-n, b) / len(pts)
+    
+    # final error is the square of the mean distance of each point to the plane
+    mean_dist = numpy.mean(array_mult(n[None,:].repeat(len(pts), axis=0), pts) + d)
+    Efit = mean_dist * mean_dist
+    
+    #print 'A', A
+    #print 'b', b
+    #print 'Z', Z
+    #print 'eigvals', eigvals
+    #print 'eigvecs', eigvecs
+    #print 'n', n
+    #print 'd', d
+    #print 'Efit', Efit
+    
+    return Efit
 
 def begin_operation():
     gc.disable()
@@ -133,7 +164,7 @@ def sandler_simplify(mesh):
     for e in vertexgraph.edges_iter(data=True):
         adjacent_faces = e[2].keys()
         if len(adjacent_faces) == 2:
-            facegraph.add_edge(adjacent_faces[0], adjacent_faces[1])
+            facegraph.add_edge(adjacent_faces[0], adjacent_faces[1], error=0.0)
     end_operation()
     print next(t)
     
@@ -148,14 +179,18 @@ def sandler_simplify(mesh):
         error = calcPerimeter(all_vertices[merged])**2
         error += calcFitError(all_vertices[numpy.unique(merged.flat)])
         merge_priorities.append((error, (v1, v2)))
+        facegraph.edge[v1][v2]['error'] = error
     end_operation()
     print next(t)
         
     print 'creating priority queue...',
     begin_operation()
-    heapq.heapify(merge_priorities)
+    merge_priorities = PriorityQueueSet(merge_priorities)
     end_operation()
     print next(t)
+    
+    while len(merge_priorities) > 0:
+        print merge_priorities.pop_smallest()
 
 
 def FilterGenerator():
