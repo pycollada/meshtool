@@ -5,6 +5,7 @@ import numpy
 import networkx as nx
 from itertools import izip, chain, repeat, imap
 import datetime
+import math
 import __builtin__
 import heapq
 from render_utils import renderVerts, renderCharts
@@ -40,6 +41,14 @@ def calcPerimeter(pts):
 
 def array_mult(arr1, arr2):
     return arr1[:,0]*arr2[:,0] + arr1[:,1]*arr2[:,1] + arr2[:,2]*arr1[:,2]
+
+def setxor2d(x, y):
+    """Same as setxor1d except it handles a 2-dimensional array"""
+    return numpy.setxor1d(x.view([('',x.dtype)] * x.shape[1]), y.view([('',y.dtype)] * y.shape[1])).view(x.dtype).reshape(-1, x.shape[1])
+
+def intersect2d(x, y):
+    """Same as intersect1d except it handles a 2-dimensional array"""
+    return numpy.intersect1d(x.view([('',x.dtype)] * x.shape[1]), y.view([('',y.dtype)] * y.shape[1])).view(x.dtype).reshape(-1, x.shape[1])
 
 def calcFitError(pts):
     # this computes the outer product of each vector
@@ -86,6 +95,12 @@ def sandler_simplify(mesh):
             all_vertices.append(boundprim.vertex)
             all_indices.append(boundprim.vertex_index + vertex_offset)
             vertex_offset += len(boundprim.vertex)
+    for boundcontroller in mesh.scene.objects('controller'):
+        boundgeom = boundcontroller.geometry
+        for boundprim in boundgeom.primitives():
+            all_vertices.append(boundprim.vertex)
+            all_indices.append(boundprim.vertex_index + vertex_offset)
+            vertex_offset += len(boundprim.vertex)
             
     all_vertices = numpy.concatenate(all_vertices)
     all_indices = numpy.concatenate(all_indices)
@@ -124,7 +139,7 @@ def sandler_simplify(mesh):
     print 'building face vertices...',
     begin_operation()
     facegraph = nx.Graph()
-    facegraph.add_nodes_from(( (i, {'tris':[tri], 'edges':[(tri[0], tri[1]), (tri[0], tri[2]), (tri[1], tri[2])]})
+    facegraph.add_nodes_from(( (i, {'tris':[tri]})
                                for i, tri in
                                enumerate(all_indices) ))
     end_operation()
@@ -133,23 +148,27 @@ def sandler_simplify(mesh):
     print 'building face edges...',
     begin_operation()
     for e in vertexgraph.edges_iter(data=True):
-        adjacent_faces = e[2].keys()
+        v1, v2, adjacent_faces = e
+        adjacent_faces = adjacent_faces.keys()
         if len(adjacent_faces) == 2:
-            facegraph.add_edge(adjacent_faces[0], adjacent_faces[1])
+            facegraph.add_edge(adjacent_faces[0], adjacent_faces[1], edges=[sorted((v1,v2))])
     end_operation()
     print next(t)
     
     merge_priorities = []
+    maxerror = 0
     
     print 'calculating error...',
     begin_operation()
     for v1, v2 in facegraph.edges_iter():
-        edges1 = facegraph.node[v1]['edges']
-        edges2 = facegraph.node[v2]['edges']
-        merged = numpy.array(merge_edges(edges1, edges2))
-        error = calcPerimeter(all_vertices[merged])**2
-        error += calcFitError(all_vertices[numpy.unique(merged.flat)])
-        merge_priorities.append((error, (v1, v2)))
+        edges1 = numpy.array(list(chain.from_iterable(iter(e[2]['edges']) for e in facegraph.edges(v1, data=True))))
+        edges2 = numpy.array(list(chain.from_iterable(iter(e[2]['edges']) for e in facegraph.edges(v2, data=True))))
+        merged = setxor2d(edges1, edges2)
+        if len(merged) > 0:
+            error = calcPerimeter(all_vertices[merged])**2
+            error += calcFitError(all_vertices[numpy.unique(merged.flat)])
+            if error > maxerror: maxerror = error
+            merge_priorities.append((error, (v1, v2)))
     end_operation()
     print next(t)
         
@@ -158,25 +177,22 @@ def sandler_simplify(mesh):
     heapq.heapify(merge_priorities)
     end_operation()
     print next(t)
-
-    #yaxis = []
     
     print 'merging charts...',
     begin_operation()
     node_count = len(all_indices)
-    cum_error = 0
-    prev_count = 0
-    #skipped = []
     while len(merge_priorities) > 0:
-        (error, (v1, v2)) = heapq.heappop(merge_priorities)
+        (error, (face1, face2)) = heapq.heappop(merge_priorities)
         
         #this can happen if we have already merged one of these
-        if v1 not in facegraph or v2 not in facegraph:
+        if face1 not in facegraph or face2 not in facegraph:
             continue
         
         # if the number of corners of the merged face is less than 3, disqualify it
         # where a "corner" is defined as a vertex with at least 3 adjacent faces
-        combined_edges = merge_edges(facegraph.node[v1]['edges'], facegraph.node[v2]['edges'])
+        edges1 = numpy.array(list(chain.from_iterable(iter(e[2]['edges']) for e in facegraph.edges(face1, data=True))))
+        edges2 = numpy.array(list(chain.from_iterable(iter(e[2]['edges']) for e in facegraph.edges(face2, data=True))))
+        combined_edges = setxor2d(edges1, edges2)
         combined_vertices = distinct_vertices(combined_edges)
         numcorners = 0
         for v in combined_vertices:
@@ -184,52 +200,63 @@ def sandler_simplify(mesh):
             for (vv1, vv2, adj_dict) in vertexgraph.edges_iter(v, data=True):
                 adjacent.extend(adj_dict.keys())
             adjacent = numpy.unique(numpy.array(adjacent))
-            numadj = len([a for a in adjacent if a != v1 and a != v2])
+            numadj = len([a for a in adjacent if a != face1 and a != face2])
             if numadj >= 3:
                 numcorners += 1
         if numcorners < 3:
             continue
         
-        cum_error += error
-        prev_avg = cum_error / prev_count
-        #print error, prev_avg / error
-        if prev_avg / error < 0.02:
+        if math.log(error) / math.log(maxerror) > 0.9:
             break
-        prev_count += 1
         
-        #yaxis.append(error)
+        combined_tris = facegraph.node[face1]['tris'] + facegraph.node[face2]['tris']
         
-        #print 'graph size', len(facegraph), 'with', len(merge_priorities), 'merges left at', error
-        combined_tris = facegraph.node[v1]['tris'] + facegraph.node[v2]['tris']
-        
-        this_node = node_count
+        newface = node_count
         node_count += 1
+        facegraph.add_node(newface, tris=combined_tris)
         
-        facegraph.add_node(this_node, {'tris':combined_tris, 'edges':combined_edges})
-        node_count += 1
+        edges_to_add = []
+        topush = []
         
-        for adjacent_face in chain(facegraph.neighbors_iter(v1), facegraph.neighbors_iter(v2)):
-            if adjacent_face == v1 or adjacent_face == v2:
-                continue
-            edges_other = facegraph.node[adjacent_face]['edges']
-            merged = numpy.array(merge_edges(combined_edges, edges_other))
-            error = calcPerimeter(all_vertices[merged])**2
-            error += calcFitError(all_vertices[numpy.unique(merged.flat)])
-            heapq.heappush(merge_priorities, (error, (this_node, adjacent_face)))
-            facegraph.add_edge(adjacent_face, this_node)
+        for curface in (face1, face2):
+            for edge in facegraph.edges_iter(curface):
+                otherface = edge[1]
+                otheredges = numpy.array(list(chain.from_iterable(iter(e[2]['edges']) for e in facegraph.edges(otherface, data=True))))
+                commonedges = intersect2d(combined_edges, otheredges)
+                
+                connected_components_graph = nx.from_edgelist(commonedges)
+                if nx.algorithms.components.connected.number_connected_components(connected_components_graph) > 1:
+                    continue
+                
+                edges_to_add.append((newface, otherface, {'edges':commonedges}))
+                
+                merged = setxor2d(combined_edges, otheredges)
+                if len(merged) > 0:
+                    error = calcPerimeter(all_vertices[merged])**2
+                    error += calcFitError(all_vertices[numpy.unique(merged.flat)])
+                    if error > maxerror: maxerror = error
+                    topush.append((error, (newface, otherface)))
+        
+        facegraph.add_edges_from(edges_to_add)
+        for p in topush:
+            heapq.heappush(merge_priorities, p)
 
-        facegraph.remove_node(v1)
-        facegraph.remove_node(v2)
+        for v in combined_vertices:
+            edges = vertexgraph.edges(v, data=True)
+            for (vv1, vv2, facedata) in edges:
+                if face1 in facedata or face2 in facedata:
+                    if face1 in facedata:
+                        del facedata[face1]
+                    if face2 in facedata:
+                        del facedata[face2]
+                    facedata[newface] = True
+                    vertexgraph.add_edge(vv1, vv2, attr_dict=facedata)
+
+        facegraph.remove_node(face1)
+        facegraph.remove_node(face2)
 
     end_operation()
     print next(t)
-
-    #import matplotlib.pyplot as plt
-    #fig = plt.figure()
-    #ax = fig.add_subplot(111)
-    #ax.set_xscale('log')
-    #ax.scatter(range(len(yaxis)), yaxis)
-    #plt.show()
     
     print 'final number of faces =', len(facegraph)
     print 'final number of connected components =', nx.algorithms.components.connected.number_connected_components(facegraph)
