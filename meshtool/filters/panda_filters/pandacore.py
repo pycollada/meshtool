@@ -348,6 +348,7 @@ def getStateFromMaterial(prim_material, texture_cache):
         if isinstance(diffuse, collada.material.Map) or isinstance(transparent, collada.material.Map):
             diffuseMap = None
             transparentMap = None
+            diffuseInitColor = None
             if isinstance(diffuse, collada.material.Map):
                 diffuseMap = diffuse
             else:
