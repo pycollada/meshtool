@@ -259,7 +259,7 @@ def pilFromData(image_data):
                 im = None
     return im
 
-def getTexture(color=None, alpha=None, texture_cache=None):
+def getTexture(color=None, alpha=None, texture_cache=None, diffuseinit=None):
 
     unique_id = ""
     if color:
@@ -287,7 +287,11 @@ def getTexture(color=None, alpha=None, texture_cache=None):
             if 'A' not in newim.getbands():
                 newim = newim.convert('RGBA')
         else:
-            newim = Image.new('RGBA', im.size)
+            if diffuseinit is None:
+                diffuseinit = (0,0,0,1)
+            else:
+                diffuseinit = tuple(int(v*255) for v in diffuseinit)
+            newim = Image.new('RGBA', im.size, diffuseinit)
         newim.putalpha(gray)
         newbuf = StringIO()
         newim.save(newbuf, 'PNG')
@@ -346,12 +350,14 @@ def getStateFromMaterial(prim_material, texture_cache):
             transparentMap = None
             if isinstance(diffuse, collada.material.Map):
                 diffuseMap = diffuse
+            else:
+                diffuseInitColor = v4fromtuple(diffuse)
             if isinstance(transparent, collada.material.Map):
                 transparentMap = transparent
             if diffuseMap == transparentMap:
                 transparentMap = None
                 
-            diffuseTexture = getTexture(color=diffuseMap, alpha=transparentMap, texture_cache=texture_cache)
+            diffuseTexture = getTexture(color=diffuseMap, alpha=transparentMap, texture_cache=texture_cache, diffuseinit=diffuseInitColor)
             texattr = addTextureStage('tsDiff', TextureStage.MModulate, texattr, diffuseTexture)
             hasDiffuse = True
 
