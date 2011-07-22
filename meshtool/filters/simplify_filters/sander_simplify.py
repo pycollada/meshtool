@@ -266,10 +266,9 @@ def sandler_simplify(mesh):
     print 'final number of faces =', len(facegraph)
     print 'final number of connected components =', nx.algorithms.components.connected.number_connected_components(facegraph)
     
-    print 'adding missing corners...',
+    print 'updating corners...',
+    begin_operation()
     for face, facedata in facegraph.nodes_iter(data=True):
-        if 'corners' in facedata:
-            continue
         edges = numpy.array(list(chain.from_iterable(iter(e[2]['edges']) for e in facegraph.edges(face, data=True))))
         vertices = distinct_vertices(edges)
         corners = []
@@ -282,14 +281,19 @@ def sandler_simplify(mesh):
             if numadj >= 3:
                 corners.append(v)
         facegraph.add_node(face, corners=corners)
+    end_operation()
     print next(t)
     
     print 'computing distance between points',
+    begin_operation()
     for v1, v2 in vertexgraph.edges_iter():
         vertexgraph.add_edge(v1, v2, distance=v3dist(all_vertices[v1],all_vertices[v2]))
+    end_operation()
     print next(t)
     
     print 'straightening chart boundaries...',
+    begin_operation()
+    numstraightened = 0
     for (face1, face2, databetween) in facegraph.edges_iter(data=True):        
         edges1 = numpy.array(list(chain.from_iterable(iter(e[2]['edges']) for e in facegraph.edges(face1, data=True))))
         edges2 = numpy.array(list(chain.from_iterable(iter(e[2]['edges']) for e in facegraph.edges(face2, data=True))))
@@ -304,14 +308,14 @@ def sandler_simplify(mesh):
         #this can happen if only a single vertex is shared
         # in that case, we can't straighten
         if len(combined_corners) < 2:
+            #print 'edges1', edges1
+            #print 'edges2', edges2
+            #print 'corners1', corners2
+            #print 'corners2', corners2
+            #print 'combined', combined_corners
+            #print 'shared_edges', shared_edges
             continue
 
-        #print 'corners1', corners2
-        #print 'corners2', corners2
-        #print 'combined', combined_corners
-        #print 'shared_edges', shared_edges
-        #print 'edges1', edges1
-        #print 'edges2', edges2
         assert(len(combined_corners) <= 2)
         
         edges1 = setxor2d(edges1, shared_edges)
@@ -433,6 +437,7 @@ def sandler_simplify(mesh):
         
         assert(len(tris1) + len(tris2) == len(combined_tris))
         
+        numstraightened += 1
         facegraph.add_edge(face1, face2, edges=new_combined_edges)
         facegraph.add_node(face1, tris=tris1)
         facegraph.add_node(face2, tris=tris2)
@@ -445,7 +450,11 @@ def sandler_simplify(mesh):
         #import sys
         #sys.exit(0)
         #blah = raw_input()
+    end_operation()
     print next(t)
+    
+    print 'numedges', facegraph.number_of_edges()
+    print 'numstraightened', numstraightened
     
     renderCharts(facegraph, all_vertices)
 
