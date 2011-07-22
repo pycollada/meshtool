@@ -39,7 +39,7 @@ import meshtool.filters.atlas_filters.make_atlases
 #Simplification
 import meshtool.filters.simplify_filters.simplify
 import meshtool.filters.simplify_filters.load_pm
-import meshtool.filters.simplify_filters.sandler_simplify
+import meshtool.filters.simplify_filters.sander_simplify
 
 #Meta filters
 import meshtool.filters.meta_filters.medium_optimizations
