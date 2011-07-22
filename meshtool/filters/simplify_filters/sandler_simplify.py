@@ -9,6 +9,7 @@ import math
 import __builtin__
 import heapq
 from render_utils import renderVerts, renderCharts
+from graph_utils import astar_path, dfs_interior_nodes
 import gc
 
 if not 'set' in __builtin__.__dict__:
@@ -38,6 +39,10 @@ def calcPerimeter(pts):
     dy = pts[:,0,1]-pts[:,1,1]
     dz = pts[:,0,2]-pts[:,1,2]
     return numpy.sum(numpy.sqrt(dx*dx + dy*dy + dz*dz))
+
+def v3dist(pt1, pt2):
+    d = pt1 - pt2
+    return math.sqrt(d[0]*d[0] + d[1]*d[1] + d[2]*d[2])
 
 def array_mult(arr1, arr2):
     return arr1[:,0]*arr2[:,0] + arr1[:,1]*arr2[:,1] + arr2[:,2]*arr1[:,2]
@@ -194,7 +199,7 @@ def sandler_simplify(mesh):
         edges2 = numpy.array(list(chain.from_iterable(iter(e[2]['edges']) for e in facegraph.edges(face2, data=True))))
         combined_edges = setxor2d(edges1, edges2)
         combined_vertices = distinct_vertices(combined_edges)
-        numcorners = 0
+        corners = []
         for v in combined_vertices:
             adjacent = []
             for (vv1, vv2, adj_dict) in vertexgraph.edges_iter(v, data=True):
@@ -202,8 +207,8 @@ def sandler_simplify(mesh):
             adjacent = numpy.unique(numpy.array(adjacent))
             numadj = len([a for a in adjacent if a != face1 and a != face2])
             if numadj >= 3:
-                numcorners += 1
-        if numcorners < 3:
+                corners.append(v)
+        if len(corners) < 3:
             continue
         
         if math.log(error) / math.log(maxerror) > 0.9:
@@ -213,7 +218,7 @@ def sandler_simplify(mesh):
         
         newface = node_count
         node_count += 1
-        facegraph.add_node(newface, tris=combined_tris)
+        facegraph.add_node(newface, corners=corners, tris=combined_tris)
         
         edges_to_add = []
         topush = []
@@ -260,6 +265,187 @@ def sandler_simplify(mesh):
     
     print 'final number of faces =', len(facegraph)
     print 'final number of connected components =', nx.algorithms.components.connected.number_connected_components(facegraph)
+    
+    print 'adding missing corners...',
+    for face, facedata in facegraph.nodes_iter(data=True):
+        if 'corners' in facedata:
+            continue
+        edges = numpy.array(list(chain.from_iterable(iter(e[2]['edges']) for e in facegraph.edges(face, data=True))))
+        vertices = distinct_vertices(edges)
+        corners = []
+        for v in vertices:
+            adjacent = []
+            for (vv1, vv2, adj_dict) in vertexgraph.edges_iter(v, data=True):
+                adjacent.extend(adj_dict.keys())
+            adjacent = numpy.unique(numpy.array(adjacent))
+            numadj = len([a for a in adjacent if a != face])
+            if numadj >= 3:
+                corners.append(v)
+        facegraph.add_node(face, corners=corners)
+    print next(t)
+    
+    print 'computing distance between points',
+    for v1, v2 in vertexgraph.edges_iter():
+        vertexgraph.add_edge(v1, v2, distance=v3dist(all_vertices[v1],all_vertices[v2]))
+    print next(t)
+    
+    print 'straightening chart boundaries...',
+    for (face1, face2, databetween) in facegraph.edges_iter(data=True):        
+        edges1 = numpy.array(list(chain.from_iterable(iter(e[2]['edges']) for e in facegraph.edges(face1, data=True))))
+        edges2 = numpy.array(list(chain.from_iterable(iter(e[2]['edges']) for e in facegraph.edges(face2, data=True))))
+        combined_edges = setxor2d(edges1, edges2)
+        shared_edges = numpy.array(databetween['edges'])
+        shared_vertices = numpy.unique(shared_edges)
+
+        corners1 = facegraph.node[face1]['corners']
+        corners2 = facegraph.node[face2]['corners']
+        combined_corners = [c for c in corners1 if c in corners2 and c in shared_edges]
+        
+        #this can happen if only a single vertex is shared
+        # in that case, we can't straighten
+        if len(combined_corners) < 2:
+            continue
+
+        #print 'corners1', corners2
+        #print 'corners2', corners2
+        #print 'combined', combined_corners
+        #print 'shared_edges', shared_edges
+        #print 'edges1', edges1
+        #print 'edges2', edges2
+        assert(len(combined_corners) <= 2)
+        
+        edges1 = setxor2d(edges1, shared_edges)
+        edges2 = setxor2d(edges2, shared_edges)
+        stop_nodes = set(combined_edges.flatten())
+        
+        corner1, corner2 = combined_corners
+        straightened_path = astar_path(vertexgraph, corner1, corner2,
+                                       heuristic=lambda x,y: v3dist(all_vertices[x], all_vertices[y]),
+                                       weight='distance', exclude=stop_nodes)
+        
+        # if we already have the shortest path, nothing to do
+        if set(shared_vertices) == set(straightened_path):
+            continue
+        
+        new_combined_edges = []
+        for i in range(len(straightened_path)-1):
+            new_combined_edges.append(sorted((straightened_path[i], straightened_path[i+1])))
+        new_combined_edges = numpy.array(new_combined_edges)
+        new_edges1 = setxor2d(edges1, new_combined_edges)
+        new_edges2 = setxor2d(edges2, new_combined_edges)
+        
+        # This can happen if one of the faces is a small and the
+        # boundary is convex. The shortest path actually encompasses
+        # the smaller face, but this would be equivalent to merging the
+        # two faces. If we didn't merge these two in the previous step,
+        # it was because the cost was too high or it would violate one of
+        # the constraints, so just ignore this 
+        if len(new_edges1) == 0 or len(new_edges2) == 0:
+            continue
+                    
+        #print 'corner', corner1, 'to corner', corner2
+        #print 'stop if hitting', stop_nodes
+        
+        #print 'original path', shared_edges
+        
+        #print 'shortest path', straightened_path
+        
+        #print 'new_combined_edges', new_combined_edges
+        #print 'newedges1', new_edges1
+        #print 'newedges2', new_edges2
+        
+        combined_tris = facegraph.node[face1]['tris'] + facegraph.node[face2]['tris']
+        boundary1 = numpy.unique(new_edges1)
+        boundary2 = numpy.unique(new_edges2)
+        
+        nodein1 = None
+        nodein2 = None
+        
+        for tri in combined_tris:
+            for pt in range(3):
+                vert = tri[pt]
+                if vert in straightened_path:
+                    continue
+                if vert in boundary1:
+                    nodein1 = tri[(pt+1) % 3]
+                if vert in boundary2:
+                    nodein2 = tri[(pt+1) % 3]
+                if nodein1 and nodein2:
+                    break
+                
+        if not nodein1 or not nodein2:
+            print 'warning: skipping because nodein1 or nodein2 was none'
+            continue
+        
+        #print 'nodein1', nodein1
+        #print 'nodein2', nodein2
+        
+        vertexset1 = set(numpy.setdiff1d(boundary1,numpy.array(straightened_path)))
+        vertexset2 = set(numpy.setdiff1d(boundary2,numpy.array(straightened_path)))
+        
+        constrained_set = set(numpy.unique(list(chain.from_iterable(combined_tris))))
+        #print 'constrained_set', constrained_set
+        #print 'vertexset1', vertexset1
+        #print 'vertexset2', vertexset2
+        
+        allin1 = list(dfs_interior_nodes(vertexgraph,
+                                         starting=vertexset1,
+                                         boundary=numpy.concatenate((boundary1, numpy.array(straightened_path))),
+                                         subset=constrained_set))
+        allin2 = list(dfs_interior_nodes(vertexgraph,
+                                         starting=vertexset2,
+                                         boundary=numpy.concatenate((boundary2, numpy.array(straightened_path))),
+                                         subset=constrained_set))
+        
+        #print 'allin1len', len(allin1) + len(boundary1) + len(straightened_path)
+        #print 'allin2len', len(allin2) + len(boundary2) + len(straightened_path)
+        
+        #print 'allin1', allin1
+        #print 'boundary1', boundary1
+        #print 'allin2', allin2
+        #print 'boundary2', boundary2
+        #print 'straightpath', straightened_path
+        
+        vertexset1 = set(allin1).union(vertexset1).union(set(straightened_path))
+        vertexset2 = set(allin2).union(vertexset2).union(set(straightened_path))
+        #print 'vertexset1', vertexset1
+        #print 'vertexset2', vertexset2
+        tris1 = []
+        tris2 = []
+        for tri in combined_tris:
+            if tri[0] in vertexset1 and tri[1] in vertexset1 and tri[2] in vertexset1:
+                tris1.append(tri)
+            elif tri[0] in vertexset2 and tri[1] in vertexset2 and tri[2] in vertexset2:
+                tris2.append(tri)
+            else:
+                #print 'found tri', tri
+                #print 'tri0 in 1?', tri[0] in vertexset1
+                #print 'tri1 in 1?', tri[1] in vertexset1
+                #print 'tri2 in 1?', tri[2] in vertexset1
+                #print 'tri0 in 2?', tri[0] in vertexset2
+                #print 'tri1 in 2?', tri[1] in vertexset2
+                #print 'tri2 in 2?', tri[2] in vertexset2
+                assert(False)
+        
+        if len(tris1) == 0 or len(tris2) == 0:
+            print 'warning: one of the tris was empty, skipping'
+            continue
+        
+        assert(len(tris1) + len(tris2) == len(combined_tris))
+        
+        facegraph.add_edge(face1, face2, edges=new_combined_edges)
+        facegraph.add_node(face1, tris=tris1)
+        facegraph.add_node(face2, tris=tris2)
+        
+        #print 'origintris1', len(facegraph.node[face1]['tris'])
+        #print 'origintris2', len(facegraph.node[face2]['tris'])
+        #print 'tris1', len(tris1)
+        #print 'tris2', len(tris2)
+        
+        #import sys
+        #sys.exit(0)
+        #blah = raw_input()
+    print next(t)
     
     renderCharts(facegraph, all_vertices)
 
