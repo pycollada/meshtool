@@ -293,7 +293,6 @@ def sandler_simplify(mesh):
     
     print 'straightening chart boundaries...',
     begin_operation()
-    numstraightened = 0
     for (face1, face2, databetween) in facegraph.edges_iter(data=True):        
         edges1 = numpy.array(list(chain.from_iterable(iter(e[2]['edges']) for e in facegraph.edges(face1, data=True))))
         edges2 = numpy.array(list(chain.from_iterable(iter(e[2]['edges']) for e in facegraph.edges(face2, data=True))))
@@ -308,12 +307,6 @@ def sandler_simplify(mesh):
         #this can happen if only a single vertex is shared
         # in that case, we can't straighten
         if len(combined_corners) < 2:
-            #print 'edges1', edges1
-            #print 'edges2', edges2
-            #print 'corners1', corners2
-            #print 'corners2', corners2
-            #print 'combined', combined_corners
-            #print 'shared_edges', shared_edges
             continue
 
         assert(len(combined_corners) <= 2)
@@ -338,25 +331,13 @@ def sandler_simplify(mesh):
         new_edges1 = setxor2d(edges1, new_combined_edges)
         new_edges2 = setxor2d(edges2, new_combined_edges)
         
-        # This can happen if one of the faces is a small and the
-        # boundary is convex. The shortest path actually encompasses
+        # This can happen if the shortest path actually encompasses
         # the smaller face, but this would be equivalent to merging the
         # two faces. If we didn't merge these two in the previous step,
         # it was because the cost was too high or it would violate one of
         # the constraints, so just ignore this 
         if len(new_edges1) == 0 or len(new_edges2) == 0:
             continue
-                    
-        #print 'corner', corner1, 'to corner', corner2
-        #print 'stop if hitting', stop_nodes
-        
-        #print 'original path', shared_edges
-        
-        #print 'shortest path', straightened_path
-        
-        #print 'new_combined_edges', new_combined_edges
-        #print 'newedges1', new_edges1
-        #print 'newedges2', new_edges2
         
         combined_tris = facegraph.node[face1]['tris'] + facegraph.node[face2]['tris']
         boundary1 = numpy.unique(new_edges1)
@@ -368,29 +349,18 @@ def sandler_simplify(mesh):
         for tri in combined_tris:
             for pt in range(3):
                 vert = tri[pt]
-                if vert in straightened_path:
-                    continue
                 if vert in boundary1:
                     nodein1 = tri[(pt+1) % 3]
                 if vert in boundary2:
                     nodein2 = tri[(pt+1) % 3]
                 if nodein1 and nodein2:
                     break
-                
-        if not nodein1 or not nodein2:
-            print 'warning: skipping because nodein1 or nodein2 was none'
-            continue
-        
-        #print 'nodein1', nodein1
-        #print 'nodein2', nodein2
+        assert(nodein1 and nodein2)
         
         vertexset1 = set(numpy.setdiff1d(boundary1,numpy.array(straightened_path)))
         vertexset2 = set(numpy.setdiff1d(boundary2,numpy.array(straightened_path)))
         
         constrained_set = set(numpy.unique(list(chain.from_iterable(combined_tris))))
-        #print 'constrained_set', constrained_set
-        #print 'vertexset1', vertexset1
-        #print 'vertexset2', vertexset2
         
         allin1 = list(dfs_interior_nodes(vertexgraph,
                                          starting=vertexset1,
@@ -401,19 +371,8 @@ def sandler_simplify(mesh):
                                          boundary=numpy.concatenate((boundary2, numpy.array(straightened_path))),
                                          subset=constrained_set))
         
-        #print 'allin1len', len(allin1) + len(boundary1) + len(straightened_path)
-        #print 'allin2len', len(allin2) + len(boundary2) + len(straightened_path)
-        
-        #print 'allin1', allin1
-        #print 'boundary1', boundary1
-        #print 'allin2', allin2
-        #print 'boundary2', boundary2
-        #print 'straightpath', straightened_path
-        
         vertexset1 = set(allin1).union(vertexset1).union(set(straightened_path))
         vertexset2 = set(allin2).union(vertexset2).union(set(straightened_path))
-        #print 'vertexset1', vertexset1
-        #print 'vertexset2', vertexset2
         tris1 = []
         tris2 = []
         for tri in combined_tris:
@@ -422,47 +381,31 @@ def sandler_simplify(mesh):
             elif tri[0] in vertexset2 and tri[1] in vertexset2 and tri[2] in vertexset2:
                 tris2.append(tri)
             else:
-                #print 'found tri', tri
-                #print 'tri0 in 1?', tri[0] in vertexset1
-                #print 'tri1 in 1?', tri[1] in vertexset1
-                #print 'tri2 in 1?', tri[2] in vertexset1
-                #print 'tri0 in 2?', tri[0] in vertexset2
-                #print 'tri1 in 2?', tri[1] in vertexset2
-                #print 'tri2 in 2?', tri[2] in vertexset2
                 assert(False)
         
+        # This can happen if the shortest path actually encompasses
+        # the smaller face, but this would be equivalent to merging the
+        # two faces. If we didn't merge these two in the previous step,
+        # it was because the cost was too high or it would violate one of
+        # the constraints, so just ignore this 
         if len(tris1) == 0 or len(tris2) == 0:
-            print 'warning: one of the tris was empty, skipping'
             continue
         
         assert(len(tris1) + len(tris2) == len(combined_tris))
-        
-        numstraightened += 1
+
         facegraph.add_edge(face1, face2, edges=new_combined_edges)
         facegraph.add_node(face1, tris=tris1)
         facegraph.add_node(face2, tris=tris2)
         
-        #print 'origintris1', len(facegraph.node[face1]['tris'])
-        #print 'origintris2', len(facegraph.node[face2]['tris'])
-        #print 'tris1', len(tris1)
-        #print 'tris2', len(tris2)
-        
-        #import sys
-        #sys.exit(0)
-        #blah = raw_input()
     end_operation()
     print next(t)
     
-    print 'numedges', facegraph.number_of_edges()
-    print 'numstraightened', numstraightened
-    
     renderCharts(facegraph, all_vertices)
-
 
 def FilterGenerator():
     class SandlerSimplificationFilter(OpFilter):
         def __init__(self):
-            super(SandlerSimplificationFilter, self).__init__('sandler_simplify', 'Simplifies the mesh based on sandler, et al. method.')
+            super(SandlerSimplificationFilter, self).__init__('sander_simplify', 'Simplifies the mesh based on sandler, et al. method.')
         def apply(self, mesh):
             sandler_simplify(mesh)
             return mesh
