@@ -2,7 +2,7 @@ from heapq import heappush, heappop
 from networkx import NetworkXError
 import networkx as nx
 
-def astar_path(G, source, target, heuristic=None, weight='weight', exclude=None):
+def astar_path(G, source, target, heuristic=None, weight='weight', exclude=None, subset=None):
     """Return a list of nodes in a shortest path between source and target 
     using the A* ("A-star") algorithm.
 
@@ -29,6 +29,9 @@ def astar_path(G, source, target, heuristic=None, weight='weight', exclude=None)
     exclude: set, optional
        An optional set of nodes that will be excluded from
        the traversal
+       
+    subset: set, optional
+       An optional set of nodes that the path has to be in
 
     Raises
     ------
@@ -94,7 +97,9 @@ def astar_path(G, source, target, heuristic=None, weight='weight', exclude=None)
         explored[curnode] = parent
 
         for neighbor, w in G[curnode].items():
-            if neighbor in explored or (exclude and neighbor != target and neighbor in exclude):
+            if neighbor in explored or \
+                    (exclude and neighbor != target and neighbor in exclude) or \
+                    (subset and neighbor not in subset):
                 continue
             ncost = dist + w.get(weight,1)
             if neighbor in enqueued:

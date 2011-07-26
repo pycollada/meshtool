@@ -47,15 +47,15 @@ def gen_color():
         RGB_tuple = colorsys.hsv_to_rgb(*HSV_tuple)
         yield map(lambda x:int(x * 256), RGB_tuple)
 
-def renderCharts(facegraph, verts):
+def renderCharts(facegraph, verts, lineset=None):
     
     from meshtool.filters.panda_filters.pandacore import getVertexData, attachLights, ensureCameraAt
     from meshtool.filters.panda_filters.pandacontrols import KeyboardMovement, MouseDrag, MouseScaleZoom
-    from panda3d.core import GeomTriangles, Geom, GeomNode, GeomVertexFormat, GeomVertexData, GeomVertexWriter
+    from panda3d.core import GeomTriangles, Geom, GeomNode, GeomVertexFormat, GeomVertexData, GeomVertexWriter, LineSegs
     from direct.showbase.ShowBase import ShowBase
        
     format=GeomVertexFormat.getV3c4()
-    vdata=GeomVertexData('square', format, Geom.UHDynamic)
+    vdata=GeomVertexData('tris', format, Geom.UHDynamic)
 
     vertex=GeomVertexWriter(vdata, 'vertex')
     color=GeomVertexWriter(vdata, 'color')
@@ -77,6 +77,35 @@ def renderCharts(facegraph, verts):
     tris=GeomTriangles(Geom.UHDynamic)
     tris.addConsecutiveVertices(0, 3*numtris)
     tris.closePrimitive()
+        
+    linenodes = []
+    if lineset:
+        for lines in lineset:
+            ls = LineSegs()
+            ls.setThickness(4)
+            curcolor = next(colors)
+            ls.setColor(curcolor[0]/256.0, curcolor[1]/256.0, curcolor[2]/256.0, 1)
+    
+            tuples = False
+            for blah in lines:
+                if isinstance(blah, tuple):
+                    tuples = True
+                break
+            if tuples:
+                for i, j in lines:
+                    frompt = verts[i]
+                    topt = verts[j]
+                    ls.moveTo(frompt[0], frompt[1], frompt[2])
+                    ls.drawTo(topt[0], topt[1], topt[2])
+            else:
+                for i in range(len(lines)-1):
+                    frompt = verts[lines[i]]
+                    topt = verts[lines[i+1]]
+                    ls.moveTo(frompt[0], frompt[1], frompt[2])
+                    ls.drawTo(topt[0], topt[1], topt[2])
+            
+            linenodes.append(ls.create())
+        
 
     pgeom = Geom(vdata)
     pgeom.addPrimitive(tris)
@@ -85,7 +114,11 @@ def renderCharts(facegraph, verts):
     p3dApp = ShowBase()
     #attachLights(render)
     geomPath = render.attachNewNode(node)
+    for linenode in linenodes:
+        render.attachNewNode(linenode)
+    
     #geomPath.setRenderModeWireframe()
+    
     ensureCameraAt(geomPath, base.camera)
     KeyboardMovement()
     #render.setShaderAuto()
