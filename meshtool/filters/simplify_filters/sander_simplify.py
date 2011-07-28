@@ -103,8 +103,13 @@ def sandler_simplify(mesh):
     unique_data, index_map = numpy.unique(all_vertices.view([('',all_vertices.dtype)]*all_vertices.shape[1]), return_inverse=True)
     all_vertices = unique_data.view(all_vertices.dtype).reshape(-1,all_vertices.shape[1])
     all_indices = index_map[all_indices]
-    all_vertices -=  numpy.min(all_vertices)
+    
+    #scale to known range so error values are normalized
+    all_vertices[:,0] -= numpy.min(all_vertices[:,0])
+    all_vertices[:,1] -= numpy.min(all_vertices[:,1])
+    all_vertices[:,2] -= numpy.min(all_vertices[:,2])
     all_vertices *= 1000.0 / numpy.max(all_vertices)
+    
     end_operation()
     print next(t)
     
@@ -297,6 +302,9 @@ def sandler_simplify(mesh):
         edges2 = facegraph.node[face2]['edges']
         combined_edges = edges1.symmetric_difference(edges2)
         shared_edges = edges1.intersection(edges2)
+        #dont bother trying to straighten a single edge
+        if len(shared_edges) == 1:
+            continue
         shared_vertices = set(chain.from_iterable(shared_edges))
 
         corners1 = facegraph.node[face1]['corners']
@@ -304,10 +312,9 @@ def sandler_simplify(mesh):
         combined_corners = corners1.intersection(corners2).intersection(shared_vertices)
         
         if len(combined_corners) < 1 or len(combined_corners) > 2:
-            print 'warning: combined corners was ', len(combined_corners)
             continue
-            assert(len(combined_corners) == 1 or len(combined_corners) == 2)
         
+        giveup = False
         if len(combined_corners) == 2:
             start_path, end_path = combined_corners
         elif len(combined_corners) == 1:
@@ -330,6 +337,9 @@ def sandler_simplify(mesh):
                 nextpt = sanedge[1]
                 shared_path.append(sanedge)
                 nextopts = pt2edge[nextpt]
+                if edge not in nextopts:
+                    giveup = True
+                    break
                 nextopts.remove(edge)
                 if len(nextopts) > 0:
                     pt2edge[nextpt] = nextopts
@@ -338,6 +348,8 @@ def sandler_simplify(mesh):
                 curpt = nextpt
             
             end_path = shared_path[-1][1] 
+        if giveup:
+            continue
         
         edges1 = edges1.symmetric_difference(shared_edges)
         edges2 = edges2.symmetric_difference(shared_edges)
@@ -345,9 +357,12 @@ def sandler_simplify(mesh):
         combined_tris = tris1 + tris2
         constrained_set = set(chain.from_iterable(combined_tris))
         
-        straightened_path = astar_path(vertexgraph, start_path, end_path,
-                                       heuristic=lambda x,y: v3dist(all_vertices[x], all_vertices[y]),
-                                       weight='distance', subset=constrained_set, exclude=stop_nodes)
+        try:
+            straightened_path = astar_path(vertexgraph, start_path, end_path,
+                                           heuristic=lambda x,y: v3dist(all_vertices[x], all_vertices[y]),
+                                           weight='distance', subset=constrained_set, exclude=stop_nodes)
+        except nx.exception.NetworkXNoPath:
+            continue
         
         # if we already have the shortest path, nothing to do
         if set(shared_vertices) == set(straightened_path):
@@ -397,7 +412,9 @@ def sandler_simplify(mesh):
             else:
                 trisneither.append(tri)
         
-        assert(len(trisneither) == 0)
+        #this can happen if the straightened path cuts off another face's edges
+        if len(trisneither) != 0:
+            continue
         
         # This can happen if the shortest path actually encompasses
         # the smaller face, but this would be equivalent to merging the
@@ -407,7 +424,9 @@ def sandler_simplify(mesh):
         if len(tris1) == 0 or len(tris2) == 0:
             continue
         
-        assert(len(tris1) + len(tris2) == len(combined_tris))
+        #this can happen if the straightened path cuts off another face's edges
+        if len(tris1) + len(tris2) != len(combined_tris):
+            continue
 
         facegraph.add_edge(face1, face2)
         facegraph.add_node(face1, tris=tris1, edges=new_edges1)
