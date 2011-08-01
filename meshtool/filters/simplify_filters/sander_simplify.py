@@ -40,6 +40,8 @@ def v3dist(pt1, pt2):
 
 def array_mult(arr1, arr2):
     return arr1[:,0]*arr2[:,0] + arr1[:,1]*arr2[:,1] + arr2[:,2]*arr1[:,2]
+def array_dot(arr1, arr2):
+    return numpy.sqrt( array_mult(arr1, arr2) )
 
 def calcFitError(pts):
     # this computes the outer product of each vector
@@ -67,6 +69,10 @@ def calcFitError(pts):
     Efit = mean_dist * mean_dist
     
     return Efit
+
+def tri_surface_area(arr):
+    crosses = numpy.cross(arr[:,0] - arr[:,1], arr[:,0] - arr[:,2])
+    return numpy.sum(array_dot(crosses, crosses) / 2.0)
 
 def begin_operation():
     gc.disable()
@@ -211,7 +217,7 @@ def sandler_simplify(mesh):
         logrel = math.log(1 + error) / math.log(1 + maxerror)
         if logrel > 0.9:
             break
-        print 'error', error, 'maxerror', maxerror, 'logrel', logrel, 'merged left', len(merge_priorities), 'numfaces', len(facegraph)
+        #print 'error', error, 'maxerror', maxerror, 'logrel', logrel, 'merged left', len(merge_priorities), 'numfaces', len(facegraph)
         
         combined_tris = facegraph.node[face1]['tris'] + facegraph.node[face2]['tris']
         
@@ -221,23 +227,26 @@ def sandler_simplify(mesh):
         edges_to_add = []
         topush = []
         
-        for curface in (face1, face2):
-            for edge in facegraph.edges_iter(curface):
-                otherface = edge[1]
-                otheredges = facegraph.node[otherface]['edges']
-                commonedges = combined_edges.intersection(otheredges)
-                
-                connected_components_graph = nx.from_edgelist(commonedges)
-                if nx.algorithms.components.connected.number_connected_components(connected_components_graph) > 1:
-                    continue
-                
-                edges_to_add.append((newface, otherface))
-                
-                merged = numpy.array(list(combined_edges.symmetric_difference(otheredges)))
-                if len(merged) > 0:
-                    error = calcPerimeter(all_vertices[merged])**2
-                    error += calcFitError(all_vertices[merged.flatten()])
-                    topush.append((error, (newface, otherface)))
+        adj_faces = set(facegraph.neighbors(face1))
+        adj_faces = adj_faces.union(set(facegraph.neighbors(face2)))
+        adj_faces.remove(face1)
+        adj_faces.remove(face2)
+        
+        for otherface in adj_faces:
+            otheredges = facegraph.node[otherface]['edges']
+            commonedges = combined_edges.intersection(otheredges)
+            
+            connected_components_graph = nx.from_edgelist(commonedges)
+            if nx.algorithms.components.connected.number_connected_components(connected_components_graph) > 1:
+                continue
+
+            edges_to_add.append((newface, otherface))
+            
+            merged = numpy.array(list(combined_edges.symmetric_difference(otheredges)))
+            if len(merged) > 0:
+                error = calcPerimeter(all_vertices[merged])**2
+                error += calcFitError(all_vertices[merged.flatten()])
+                topush.append((error, (newface, otherface)))
 
         facegraph.add_node(newface, corners=corners, tris=combined_tris, edges=combined_edges)        
         facegraph.add_edges_from(edges_to_add)
@@ -435,7 +444,136 @@ def sandler_simplify(mesh):
     end_operation()
     print next(t)
     
-    renderCharts(facegraph, all_vertices)
+    print 'forming initial chart parameterizations...',
+    begin_operation()
+    for (face, facedata) in facegraph.nodes_iter(data=True):
+        border_edges = facedata['edges']
+        chart_tris = facedata['tris']
+        
+        unique_verts = numpy.unique(numpy.array(chart_tris))
+        border_verts = numpy.unique(numpy.array(list(border_edges)))
+        interior_verts = numpy.setdiff1d(unique_verts, border_verts, assume_unique=True)
+        
+        #fakegraph = nx.Graph()
+        #fakegraph.add_node(0, tris=chart_tris)
+        #renderCharts(fakegraph, all_vertices, lineset=[border_edges])
+        
+        pt2edge = {}
+        for edge in border_edges:
+            v1, v2 = edge
+            v1list = pt2edge.get(v1, [])
+            v2list = pt2edge.get(v2, [])
+            v1list.append(edge)
+            v2list.append(edge)
+            pt2edge[v1] = v1list
+            pt2edge[v2] = v2list
+        
+        numvisited = 0
+        total_dist = 0
+        cycled = False
+        start_pt = next(iter(border_edges))[0]
+        curpt = start_pt
+        boundary_path = []
+        while not cycled:
+            edge = pt2edge[curpt][0]
+            sanedge = edge
+            if edge[0] != curpt:
+                sanedge = (edge[1], edge[0])
+            nextpt = sanedge[1]
+            boundary_path.append(sanedge)
+            numvisited += 1
+            total_dist += v3dist(all_vertices[sanedge[0]], all_vertices[sanedge[1]])
+            nextopts = pt2edge[nextpt]
+            nextopts.remove(edge)
+            if len(nextopts) > 0:
+                pt2edge[nextpt] = nextopts
+            else:
+                del pt2edge[nextpt]
+            curpt = nextpt
+            if curpt == start_pt:
+                cycled = True
+        assert(numvisited == len(border_edges))
+        
+        curangle = 0
+        for edge in boundary_path:
+            angle = v3dist(all_vertices[edge[0]], all_vertices[edge[1]]) / total_dist
+            curangle += angle * 2 * math.pi
+            x, y = math.sin(curangle), math.cos(curangle)
+            vertexgraph.add_node(edge[0], u=x)
+            vertexgraph.add_node(edge[0], v=y)
+        
+        if len(interior_verts) > 0:
+        
+            vert2idx = {}
+            for i, v in enumerate(interior_verts):
+                vert2idx[v] = i
+            
+            A = numpy.zeros(shape=(len(interior_verts), len(interior_verts)), dtype=numpy.float32)
+            Bu = numpy.zeros(len(interior_verts))
+            Bv = numpy.zeros(len(interior_verts))
+            sumu = numpy.zeros(len(interior_verts))
+            
+            for edge in vertexgraph.subgraph(unique_verts).edges_iter():
+                v1, v2 = edge
+                if v1 in border_verts and v2 in border_verts:
+                    continue
+                
+                edgelen = v3dist(all_vertices[v1], all_vertices[v2])
+                if v1 in border_verts:
+                    Bu[vert2idx[v2]] += edgelen * vertexgraph.node[v1]['u']
+                    Bv[vert2idx[v2]] += edgelen * vertexgraph.node[v1]['v']
+                    sumu[vert2idx[v2]] += edgelen
+                elif v2 in border_verts:
+                    Bu[vert2idx[v1]] += edgelen * vertexgraph.node[v2]['u']
+                    Bv[vert2idx[v1]] += edgelen * vertexgraph.node[v2]['v']
+                    sumu[vert2idx[v1]] += edgelen
+                else:
+                    A[vert2idx[v1]][vert2idx[v2]] = -1 * edgelen
+                    A[vert2idx[v2]][vert2idx[v1]] = -1 * edgelen
+                    sumu[vert2idx[v1]] += edgelen
+                    sumu[vert2idx[v2]] += edgelen
+            
+            Bu.shape = (len(Bu), 1)
+            Bv.shape = (len(Bv), 1)
+            sumu.shape = (len(sumu), 1)
+            
+            A /= sumu
+            Bu /= sumu
+            Bv /= sumu
+            numpy.fill_diagonal(A, 1)
+            
+            interior_us = numpy.linalg.solve(A, Bu)
+            interior_vs = numpy.linalg.solve(A, Bv)
+            for (i, (u, v)) in enumerate(zip(interior_us, interior_vs)):
+                vertexgraph.add_node(interior_verts[i], u=u, v=v)
+        
+        #import Image, ImageDraw
+        #W, H = 500, 500
+        #im = Image.new("RGB", (W,H), (255,255,255))
+        #draw = ImageDraw.Draw(im)
+        
+        #for edge in vertexgraph.subgraph(unique_verts).edges_iter():
+        #    pt1, pt2 = edge
+        #    u1 = vertexgraph.node[pt1]['u']
+        #    u2 = vertexgraph.node[pt2]['u']
+        #    v1 = vertexgraph.node[pt1]['v']
+        #    v2 = vertexgraph.node[pt2]['v']
+        #    uv1 = ( (u1+1)/2.0 * W, (v1+1)/2.0 * H )
+        #    uv2 = ( (u2+1)/2.0 * W, (v2+1)/2.0 * H )
+        #    draw.ellipse((uv1[0]-5, uv1[1]-5, uv1[0]+5, uv1[1]+5), outline=(0,0,0), fill=(255,0,0))
+        #    draw.ellipse((uv2[0]-5, uv2[1]-5, uv2[0]+5, uv2[1]+5), outline=(0,0,0), fill=(255,0,0))
+        #    draw.line([uv1, uv2], fill=(0,0,0))
+        
+        #del draw
+        #im.show()
+        
+        #import sys
+        #sys.exit(0)
+        
+    end_operation()
+    print next(t)
+    
+    return mesh
 
 def FilterGenerator():
     class SandlerSimplificationFilter(OpFilter):
