@@ -1,5 +1,6 @@
 from meshtool.args import *
 from meshtool.filters.base_filters import *
+from meshtool.filters.print_filters.print_render_info import getRenderInfo
 
 try:
     import json
@@ -42,6 +43,7 @@ def getJSON(mesh):
                 'effects': effects,
                 'images': images,
                 'primitives': primitives}
+    json_ret.update(getRenderInfo(mesh))
     return json.dumps(json_ret)
 
 def FilterGenerator():
