@@ -75,6 +75,26 @@ def tri_surface_area(arr):
     crosses = numpy.cross(arr[:,0] - arr[:,1], arr[:,0] - arr[:,2])
     return numpy.sum(array_dot(crosses, crosses) / 2.0)
 
+def stretch_metric(t3d, t2d):
+    q1 = t3d[:,0]
+    q2 = t3d[:,1]
+    q3 = t3d[:,2]
+    s1 = t2d[:,0,0]
+    s2 = t2d[:,1,0]
+    s3 = t2d[:,2,0]
+    t1 = t2d[:,0,1]
+    t2 = t2d[:,1,1]
+    t3 = t2d[:,2,1]
+    A = ((s2-s1)*(t3-t1) - (s3-s1)*(t2-t1)) / 2.0
+    
+    S_s = (q1*(t2-t3)[:,None] + q2*(t3-t1)[:,None] + q3*(t1-t2)[:,None]) / (2.0 * A)[:,None]
+    S_t = (q1*(s3-s2)[:,None] + q2*(s1-s3)[:,None] + q3*(s2-s1)[:,None]) / (2.0 * A)[:,None]
+    
+    print S_s
+    print S_t
+    
+    #L2_1 = math.sqrt((numpy.dot(S_s,S_s) + numpy.dot(S_t,S_t)) / 2.0)
+
 def begin_operation():
     gc.disable()
 def end_operation():
@@ -335,12 +355,6 @@ def sandler_simplify(mesh):
     end_operation()
     print next(t)
 
-    numlen1 = 0
-    for chart, chartdata in facegraph.nodes_iter(data=True):
-        if len(chartdata['tris']) == 1:
-            numlen1 += 1
-    print 'numlen1', numlen1
-
     print 'straightening chart boundaries...',
     begin_operation()
     for (face1, face2) in facegraph.edges_iter():
@@ -503,7 +517,6 @@ def sandler_simplify(mesh):
         unique_verts = numpy.unique(numpy.array(chart_tris))
         border_verts = numpy.unique(numpy.array(list(border_edges)))
         interior_verts = numpy.setdiff1d(unique_verts, border_verts, assume_unique=True)
-        
                 
         bordergraph = nx.from_edgelist(border_edges)
         bigcycle = list(super_cycle(bordergraph))
@@ -568,7 +581,7 @@ def sandler_simplify(mesh):
             interior_us = numpy.linalg.solve(A, Bu)
             interior_vs = numpy.linalg.solve(A, Bv)
             for (i, (u, v)) in enumerate(zip(interior_us, interior_vs)):
-                vertexgraph.add_node(interior_verts[i], u=u, v=v)
+                vertexgraph.add_node(interior_verts[i], u=u, v=v, stretch=0)
         
         #import Image, ImageDraw
         #W, H = 500, 500
@@ -597,7 +610,48 @@ def sandler_simplify(mesh):
     end_operation()
     print next(t)
     
-    
+    print 'optimizing chart parameterizations...',
+    begin_operation()
+    for (face, facedata) in facegraph.nodes_iter(data=True):
+        border_edges = facedata['edges']
+        chart_tris = facedata['tris']
+        tri_3d = all_vertices[numpy.array(chart_tris)]
+        tri_2d = numpy.array([[
+                   [vertexgraph.node[tri[0]]['u'], vertexgraph.node[tri[0]]['v']],
+                   [vertexgraph.node[tri[1]]['u'], vertexgraph.node[tri[1]]['v']],
+                   [vertexgraph.node[tri[2]]['u'], vertexgraph.node[tri[2]]['v']]]
+                  for tri in chart_tris ])
+        
+        if len(chart_tris) < 2:
+            continue
+        
+        tri_3d1 = tri_3d[0]
+        tri_2d1 = tri_2d[0]
+        
+        q1 = tri_3d1[0]
+        q2 = tri_3d1[1]
+        q3 = tri_3d1[2]
+        s1 = tri_2d1[0][0]
+        s2 = tri_2d1[1][0]
+        s3 = tri_2d1[2][0]
+        t1 = tri_2d1[0][1]
+        t2 = tri_2d1[1][1]
+        t3 = tri_2d1[2][1]
+        A = ((s2-s1)*(t3-t1) - (s3-s1)*(t2-t1)) / 2.0
+        S_s = (q1*(t2-t3) + q2*(t3-t1) + q3*(t1-t2)) / (2.0 * A)
+        S_t = (q1*(s3-s2) + q2*(s1-s3) + q3*(s2-s1)) / (2.0 * A)
+        
+        L2_1 = math.sqrt((numpy.dot(S_s,S_s) + numpy.dot(S_t,S_t)) / 2.0)
+        print L2_1
+        
+        print stretch_metric(tri_3d, tri_2d)
+        
+        import sys
+        sys.exit(0)
+        
+        
+    end_operation()
+    print next(t)
     
     return mesh
 
