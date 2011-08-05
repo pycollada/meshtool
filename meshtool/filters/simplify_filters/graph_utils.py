@@ -1,6 +1,12 @@
 from heapq import heappush, heappop
 from networkx import NetworkXError
 import networkx as nx
+import __builtin__
+
+#python 2.5 set
+if not 'set' in __builtin__.__dict__:
+    import sets
+    set = sets.Set
 
 def astar_path(G, source, target, heuristic=None, weight='weight', exclude=None, subset=None):
     """Return a list of nodes in a shortest path between source and target 
@@ -154,3 +160,23 @@ def dfs_interior_nodes(G, starting, boundary, subset):
                     stack.append(iter(G[child]))
             except StopIteration:
                 stack.pop()
+                
+def super_cycle(G):
+    """Yields the nodes of the longest cycle available in G"""
+    
+    cycles = nx.algorithms.cycles.cycle_basis(G)
+    cycle_sets = [set(c) for c in cycles]
+    visited_cycles = set()
+    
+    def visit_cycle(curcycle, startnode):
+        thiscycle = cycles[curcycle]
+        reordered_cycle = thiscycle[thiscycle.index(startnode):] + thiscycle[:thiscycle.index(startnode)]
+        visited_cycles.add(curcycle)
+        for node in reordered_cycle:
+            for i, othercycle in enumerate(cycle_sets):
+                if i not in visited_cycles and node in othercycle:
+                    for othernode in visit_cycle(i, node):
+                        yield othernode
+            yield node
+        
+    return visit_cycle(0, cycles[0][0])

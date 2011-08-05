@@ -9,9 +9,10 @@ import math
 import __builtin__
 import heapq
 from render_utils import renderVerts, renderCharts
-from graph_utils import astar_path, dfs_interior_nodes
+from graph_utils import astar_path, dfs_interior_nodes, super_cycle
 import gc
 
+#python 2.5 set
 if not 'set' in __builtin__.__dict__:
     import sets
     set = sets.Set
@@ -128,18 +129,32 @@ def sandler_simplify(mesh):
     
     print 'building vertex edges...',
     begin_operation()
-    vertexgraph.add_edges_from(( (edge[0], edge[1], {facenum:True})
+    vertexgraph.add_edges_from(all_indices[:,(0,1)])
+    vertexgraph.add_edges_from(all_indices[:,(0,2)])
+    vertexgraph.add_edges_from(all_indices[:,(1,2)])
+    
+    vertexgraph.add_nodes_from(( (edge[0], {facenum: True})
                                  for facenum, edge in
                                  enumerate(all_indices[:,(0,1)]) ))
-    vertexgraph.add_edges_from(( (edge[0], edge[1], {facenum:True})
+    vertexgraph.add_nodes_from(( (edge[0], {facenum: True})
                                  for facenum, edge in
                                  enumerate(all_indices[:,(0,2)]) ))
-    vertexgraph.add_edges_from(( (edge[0], edge[1], {facenum:True})
+    vertexgraph.add_nodes_from(( (edge[0], {facenum: True})
+                                 for facenum, edge in
+                                 enumerate(all_indices[:,(1,2)]) ))
+    vertexgraph.add_nodes_from(( (edge[1], {facenum: True})
+                                 for facenum, edge in
+                                 enumerate(all_indices[:,(0,1)]) ))
+    vertexgraph.add_nodes_from(( (edge[1], {facenum: True})
+                                 for facenum, edge in
+                                 enumerate(all_indices[:,(0,2)]) ))
+    vertexgraph.add_nodes_from(( (edge[1], {facenum: True})
                                  for facenum, edge in
                                  enumerate(all_indices[:,(1,2)]) ))
     end_operation()
     print next(t)
     
+    print 'number of faces', len(all_indices)
     print 'number of connected components in vertex graph =', nx.algorithms.components.connected.number_connected_components(vertexgraph)
     
     print 'building face vertices...',
@@ -156,11 +171,12 @@ def sandler_simplify(mesh):
     
     print 'building face edges...',
     begin_operation()
-    for e in vertexgraph.edges_iter(data=True):
-        v1, v2, adjacent_faces = e
-        adjacent_faces = adjacent_faces.keys()
-        if len(adjacent_faces) == 2:
-            facegraph.add_edge(adjacent_faces[0], adjacent_faces[1])
+    for (v1, v2) in vertexgraph.edges_iter():
+        adj_v1 = set(vertexgraph.node[v1].keys())
+        adj_v2 = set(vertexgraph.node[v2].keys())
+        adj_both = adj_v1.intersection(adj_v2)
+        if len(adj_both) == 2:
+            facegraph.add_edge(*adj_both)
     end_operation()
     print next(t)
     
@@ -197,21 +213,28 @@ def sandler_simplify(mesh):
         if face1 not in facegraph or face2 not in facegraph:
             continue
         
-        # if the number of corners of the merged face is less than 3, disqualify it
-        # where a "corner" is defined as a vertex with at least 3 adjacent faces
         edges1 = facegraph.node[face1]['edges']
         edges2 = facegraph.node[face2]['edges']
         combined_edges = edges1.symmetric_difference(edges2)
 
+        #check if boundary if more than one connected component
+        connected_components_graph = nx.from_edgelist(combined_edges)
+        if nx.algorithms.components.connected.number_connected_components(connected_components_graph) > 1:           
+            continue
+
+        # if the number of corners of the merged face is less than 3, disqualify it
+        # where a "corner" is defined as a vertex with at least 3 adjacent faces
         combined_vertices = set(chain.from_iterable(combined_edges))
-        corners = set()
+        newcorners = set()
         for v in combined_vertices:
-            adjacent = set()
-            for (vv1, vv2, adj_dict) in vertexgraph.edges_iter(v, data=True):
-                adjacent.update(adj_dict.keys())
-            if len(adjacent) >= 3:
-                corners.add(v)
-        if len(corners) < 3:
+            adj_v = set(vertexgraph.node[v].keys())
+            if face1 in adj_v or face2 in adj_v:
+                adj_v.add(-1) #standin for new face
+            adj_v.discard(face1)
+            adj_v.discard(face2)
+            if len(adj_v) >= 3:
+                newcorners.add(v)
+        if len(newcorners) < 1:
             continue
         
         logrel = math.log(1 + error) / math.log(1 + maxerror)
@@ -219,51 +242,72 @@ def sandler_simplify(mesh):
             break
         #print 'error', error, 'maxerror', maxerror, 'logrel', logrel, 'merged left', len(merge_priorities), 'numfaces', len(facegraph)
         
-        combined_tris = facegraph.node[face1]['tris'] + facegraph.node[face2]['tris']
-        
         newface = node_count
         node_count += 1
         
         edges_to_add = []
-        topush = []
         
         adj_faces = set(facegraph.neighbors(face1))
         adj_faces = adj_faces.union(set(facegraph.neighbors(face2)))
         adj_faces.remove(face1)
         adj_faces.remove(face2)
         
+        invalidmerge = False
         for otherface in adj_faces:
             otheredges = facegraph.node[otherface]['edges']
             commonedges = combined_edges.intersection(otheredges)
             
             connected_components_graph = nx.from_edgelist(commonedges)
-            if nx.algorithms.components.connected.number_connected_components(connected_components_graph) > 1:
-                continue
-
-            edges_to_add.append((newface, otherface))
             
+            #invalid merge if border between merged face and neighbor is more than one connected component
+            if nx.algorithms.components.connected.number_connected_components(connected_components_graph) > 1:
+                invalidmerge = True
+                break
+            #or more than one cycle
+            cycles = nx.algorithms.cycles.cycle_basis(connected_components_graph)
+            if len(cycles) > 1:
+                invalidmerge = True
+                break
+
+            vertices = set(chain.from_iterable(otheredges))
+            othernewcorners = set()
+            for v in vertices:
+                adj_v = set(vertexgraph.node[v].keys())
+                if face1 in adj_v or face2 in adj_v:
+                    adj_v.add(newface)
+                adj_v.discard(face1)
+                adj_v.discard(face2)
+                if len(adj_v) >= 3:
+                    othernewcorners.add(v)
+            
+            #invalid merge if neighbor would have less than 3 corners
+            if len(othernewcorners) < 1:
+                invalidmerge = True
+                break
+            
+            edges_to_add.append((newface, otherface))
+
+        if invalidmerge:
+            continue
+
+        combined_tris = facegraph.node[face1]['tris'] + facegraph.node[face2]['tris']
+        facegraph.add_node(newface, tris=combined_tris, edges=combined_edges)        
+        facegraph.add_edges_from(edges_to_add)
+        for otherface in adj_faces:
+            otheredges = facegraph.node[otherface]['edges']
             merged = numpy.array(list(combined_edges.symmetric_difference(otheredges)))
             if len(merged) > 0:
                 error = calcPerimeter(all_vertices[merged])**2
                 error += calcFitError(all_vertices[merged.flatten()])
-                topush.append((error, (newface, otherface)))
-
-        facegraph.add_node(newface, corners=corners, tris=combined_tris, edges=combined_edges)        
-        facegraph.add_edges_from(edges_to_add)
-        for p in topush:
-            if p[0] > maxerror: maxerror = p[0]
-            heapq.heappush(merge_priorities, p)
+                if error > maxerror: maxerror = error
+                heapq.heappush(merge_priorities, (error, (newface, otherface)))
 
         for v in combined_vertices:
-            edges = vertexgraph.edges(v, data=True)
-            for (vv1, vv2, facedata) in edges:
-                if face1 in facedata or face2 in facedata:
-                    if face1 in facedata:
-                        del facedata[face1]
-                    if face2 in facedata:
-                        del facedata[face2]
-                    facedata[newface] = True
-                    vertexgraph.add_edge(vv1, vv2, attr_dict=facedata)
+            if face1 in vertexgraph.node[v]:
+                del vertexgraph.node[v][face1]
+            if face2 in vertexgraph.node[v]:
+                del vertexgraph.node[v][face2]
+            vertexgraph.node[v][newface] = True
 
         facegraph.remove_node(face1)
         facegraph.remove_node(face2)
@@ -279,14 +323,8 @@ def sandler_simplify(mesh):
     for face, facedata in facegraph.nodes_iter(data=True):
         edges = facegraph.node[face]['edges']
         vertices = set(chain.from_iterable(edges))
-        corners = set()
-        for v in vertices:
-            adjacent = set()
-            for (vv1, vv2, adj_dict) in vertexgraph.edges_iter(v, data=True):
-                adjacent.update(adj_dict.keys())
-            if len(adjacent) >= 3:
-                corners.add(v)
-        facegraph.add_node(face, corners=corners)
+        corners = set((v for v in vertices if len(vertexgraph.node[v]) >= 3))
+        facegraph.node[face]['corners'] = corners
     end_operation()
     print next(t)
     
@@ -296,7 +334,13 @@ def sandler_simplify(mesh):
         vertexgraph.add_edge(v1, v2, distance=v3dist(all_vertices[v1],all_vertices[v2]))
     end_operation()
     print next(t)
-    
+
+    numlen1 = 0
+    for chart, chartdata in facegraph.nodes_iter(data=True):
+        if len(chartdata['tris']) == 1:
+            numlen1 += 1
+    print 'numlen1', numlen1
+
     print 'straightening chart boundaries...',
     begin_operation()
     for (face1, face2) in facegraph.edges_iter():
@@ -311,16 +355,18 @@ def sandler_simplify(mesh):
         edges2 = facegraph.node[face2]['edges']
         combined_edges = edges1.symmetric_difference(edges2)
         shared_edges = edges1.intersection(edges2)
+        
         #dont bother trying to straighten a single edge
         if len(shared_edges) == 1:
             continue
+        
         shared_vertices = set(chain.from_iterable(shared_edges))
-
         corners1 = facegraph.node[face1]['corners']
         corners2 = facegraph.node[face2]['corners']
         combined_corners = corners1.intersection(corners2).intersection(shared_vertices)
         
         if len(combined_corners) < 1 or len(combined_corners) > 2:
+            print 'warn combined corners wrong'
             continue
         
         giveup = False
@@ -347,6 +393,7 @@ def sandler_simplify(mesh):
                 shared_path.append(sanedge)
                 nextopts = pt2edge[nextpt]
                 if edge not in nextopts:
+                    print 'warn corner1 bad'
                     giveup = True
                     break
                 nextopts.remove(edge)
@@ -423,6 +470,7 @@ def sandler_simplify(mesh):
         
         #this can happen if the straightened path cuts off another face's edges
         if len(trisneither) != 0:
+            print 'warn trisneither'
             continue
         
         # This can happen if the shortest path actually encompasses
@@ -431,10 +479,12 @@ def sandler_simplify(mesh):
         # it was because the cost was too high or it would violate one of
         # the constraints, so just ignore this 
         if len(tris1) == 0 or len(tris2) == 0:
+            print 'warn encompassing2'
             continue
         
         #this can happen if the straightened path cuts off another face's edges
         if len(tris1) + len(tris2) != len(combined_tris):
+            print 'warn cutoff'
             continue
 
         facegraph.add_edge(face1, face2)
@@ -454,45 +504,18 @@ def sandler_simplify(mesh):
         border_verts = numpy.unique(numpy.array(list(border_edges)))
         interior_verts = numpy.setdiff1d(unique_verts, border_verts, assume_unique=True)
         
-        #fakegraph = nx.Graph()
-        #fakegraph.add_node(0, tris=chart_tris)
-        #renderCharts(fakegraph, all_vertices, lineset=[border_edges])
-        
-        pt2edge = {}
-        for edge in border_edges:
-            v1, v2 = edge
-            v1list = pt2edge.get(v1, [])
-            v2list = pt2edge.get(v2, [])
-            v1list.append(edge)
-            v2list.append(edge)
-            pt2edge[v1] = v1list
-            pt2edge[v2] = v2list
-        
-        numvisited = 0
-        total_dist = 0
-        cycled = False
-        start_pt = next(iter(border_edges))[0]
-        curpt = start_pt
+                
+        bordergraph = nx.from_edgelist(border_edges)
+        bigcycle = list(super_cycle(bordergraph))
         boundary_path = []
-        while not cycled:
-            edge = pt2edge[curpt][0]
-            sanedge = edge
-            if edge[0] != curpt:
-                sanedge = (edge[1], edge[0])
-            nextpt = sanedge[1]
-            boundary_path.append(sanedge)
-            numvisited += 1
-            total_dist += v3dist(all_vertices[sanedge[0]], all_vertices[sanedge[1]])
-            nextopts = pt2edge[nextpt]
-            nextopts.remove(edge)
-            if len(nextopts) > 0:
-                pt2edge[nextpt] = nextopts
-            else:
-                del pt2edge[nextpt]
-            curpt = nextpt
-            if curpt == start_pt:
-                cycled = True
-        assert(numvisited == len(border_edges))
+        for i in range(len(bigcycle)-1):
+            boundary_path.append((bigcycle[i], bigcycle[i+1]))
+        boundary_path.append((bigcycle[len(bigcycle)-1], bigcycle[0]))
+        assert(len(boundary_path) == len(border_edges))
+
+        total_dist = 0
+        for (v1, v2) in boundary_path:
+            total_dist += v3dist(all_vertices[v1], all_vertices[v2])
         
         curangle = 0
         for edge in boundary_path:
@@ -566,12 +589,15 @@ def sandler_simplify(mesh):
         
         #del draw
         #im.show()
+        #blah = raw_input()
         
         #import sys
         #sys.exit(0)
         
     end_operation()
     print next(t)
+    
+    
     
     return mesh
 
