@@ -82,7 +82,7 @@ def tri_areas_2d(arr):
              arr[:,2,0]*(arr[:,0,1]-arr[:,1,1])
             ) / 2.0
 
-def stretch_metric(t3d, t2d, return_A2d=False, flippedCheck=None):
+def stretch_metric(t3d, t2d, return_A2d=False, flippedCheck=None, normalize=False):
     q1 = t3d[:,0]
     q2 = t3d[:,1]
     q3 = t3d[:,2]
@@ -99,11 +99,10 @@ def stretch_metric(t3d, t2d, return_A2d=False, flippedCheck=None):
     
     L2 = numpy.sqrt((array_mult(S_s,S_s) + array_mult(S_t,S_t)) / 2.0)
     if flippedCheck is not None:
-        L2[numpy.logical_not(numpy.logical_xor(A2d < 0, flippedCheck < 0))] = numpy.inf
-    #L2[A2d < 0] = numpy.Inf
-    #if normalize:
-    #    A3d = tri_areas_3d(t3d)
-    #    L2 = numpy.sqrt(numpy.sum(L2*L2*A3d) / numpy.sum(A3d)) * numpy.sqrt(numpy.sum(A2d) / numpy.sum(A3d))
+        L2[numpy.logical_xor(A2d < 0, flippedCheck < 0)] = numpy.inf
+    if normalize:
+        A3d = tri_areas_3d(t3d)
+        L2 = numpy.sqrt(numpy.sum(L2*L2*A3d) / numpy.sum(A3d)) * numpy.sqrt(numpy.sum(numpy.abs(A2d)) / numpy.sum(A3d))
     if return_A2d:
         return L2, A2d
     return L2
@@ -596,26 +595,30 @@ def sandler_simplify(mesh):
             for (i, (u, v)) in enumerate(zip(interior_us, interior_vs)):
                 vertexgraph.add_node(interior_verts[i], u=u[0], v=v[0], stretch=0)
         
-        #import Image, ImageDraw
-        #W, H = 500, 500
-        #im = Image.new("RGB", (W,H), (255,255,255))
-        #draw = ImageDraw.Draw(im)
+        import Image, ImageDraw
+        W, H = 500, 500
+        im = Image.new("RGB", (W,H), (255,255,255))
+        draw = ImageDraw.Draw(im)
         
-        #for edge in vertexgraph.subgraph(unique_verts).edges_iter():
-        #    pt1, pt2 = edge
-        #    u1 = vertexgraph.node[pt1]['u']
-        #    u2 = vertexgraph.node[pt2]['u']
-        #    v1 = vertexgraph.node[pt1]['v']
-        #    v2 = vertexgraph.node[pt2]['v']
-        #    uv1 = ( u1 * W, v1 * H )
-        #    uv2 = ( u2 * W, v2 * H )
-        #    draw.ellipse((uv1[0]-5, uv1[1]-5, uv1[0]+5, uv1[1]+5), outline=(0,0,0), fill=(255,0,0))
-        #    draw.ellipse((uv2[0]-5, uv2[1]-5, uv2[0]+5, uv2[1]+5), outline=(0,0,0), fill=(255,0,0))
-        #    draw.line([uv1, uv2], fill=(0,0,0))
+        for edge in vertexgraph.subgraph(unique_verts).edges_iter():
+            pt1, pt2 = edge
+            u1 = vertexgraph.node[pt1]['u']
+            u2 = vertexgraph.node[pt2]['u']
+            v1 = vertexgraph.node[pt1]['v']
+            v2 = vertexgraph.node[pt2]['v']
+            uv1 = ( u1 * W, v1 * H )
+            uv2 = ( u2 * W, v2 * H )
+            draw.ellipse((uv1[0]-5, uv1[1]-5, uv1[0]+5, uv1[1]+5), outline=(0,0,0), fill=(255,0,0))
+            draw.ellipse((uv2[0]-5, uv2[1]-5, uv2[0]+5, uv2[1]+5), outline=(0,0,0), fill=(255,0,0))
+            draw.line([uv1, uv2], fill=(0,0,0))
         
-        #del draw
-        #im.show()
-        #blah = raw_input()
+        del draw
+        im.show()
+        blah = raw_input()
+        if blah != '':
+            fakegraph = nx.Graph()
+            fakegraph.add_node(0, tris=chart_tris)
+            renderCharts(fakegraph, all_vertices, lineset=[border_edges])
         
         #import sys
         #sys.exit(0)
@@ -635,13 +638,33 @@ def sandler_simplify(mesh):
                    [vertexgraph.node[tri[2]]['u'], vertexgraph.node[tri[2]]['v']]]
                   for tri in chart_tris ])
         
-        #TODO: REMOVEME
-        if len(chart_tris) < 2:
-            continue
-        
         L2 = stretch_metric(tri_3d, tri_2d)
         
         unique_verts, index_map = numpy.unique(chart_tris, return_inverse=True)
+        border_verts = set(chain.from_iterable(border_edges))
+        
+        #TODO: REMOVEME
+        if len(unique_verts) - len(border_verts) < 5:
+            continue
+        
+        import Image, ImageDraw
+        W, H = 500, 500
+        im = Image.new("RGB", (W,H), (255,255,255))
+        draw = ImageDraw.Draw(im)
+        for edge in vertexgraph.subgraph(unique_verts).edges_iter():
+            pt1, pt2 = edge
+            u1 = vertexgraph.node[pt1]['u']
+            u2 = vertexgraph.node[pt2]['u']
+            v1 = vertexgraph.node[pt1]['v']
+            v2 = vertexgraph.node[pt2]['v']
+            uv1 = ( u1 * W, v1 * H )
+            uv2 = ( u2 * W, v2 * H )
+            draw.ellipse((uv1[0]-5, uv1[1]-5, uv1[0]+5, uv1[1]+5), outline=(0,0,0), fill=(255,0,0))
+            draw.ellipse((uv2[0]-5, uv2[1]-5, uv2[0]+5, uv2[1]+5), outline=(0,0,0), fill=(255,0,0))
+            draw.line([uv1, uv2], fill=(0,0,0))
+        del draw
+        im.show()
+        
         index_map.shape = chart_tris.shape
         neighborhood_stretch = numpy.zeros(unique_verts.shape, dtype=numpy.float32)
 
@@ -654,54 +677,121 @@ def sandler_simplify(mesh):
         
         while len(vert_stretch_heap) > 0:
             stretch, vert = heapq.heappop(vert_stretch_heap)
-            print vert, stretch
+            if vert in border_verts:
+                continue
             
             ucoord, vcoord = vertexgraph.node[vert]['u'], vertexgraph.node[vert]['v']
+            origu, origv = ucoord, vcoord
             
-            adj_tris = chart_tris[numpy.logical_or(numpy.logical_or(
-                            chart_tris[:,0] == vert,
-                            chart_tris[:,1] == vert),
-                            chart_tris[:,2] == vert)]
-            neighborhood_tri3d = all_vertices[adj_tris]
-            neighborhood_tri_2d = numpy.array([[
-                       [vertexgraph.node[tri[0]]['u'], vertexgraph.node[tri[0]]['v']],
-                       [vertexgraph.node[tri[1]]['u'], vertexgraph.node[tri[1]]['v']],
-                       [vertexgraph.node[tri[2]]['u'], vertexgraph.node[tri[2]]['v']]]
-                      for tri in adj_tris ])
-            neighborhood_L2, origA2d = stretch_metric(neighborhood_tri3d, neighborhood_tri_2d, return_A2d=True)
-            print 'orig L2', neighborhood_L2
+            vert_tri1 = chart_tris[:,0] == vert
+            vert_tri2 = chart_tris[:,1] == vert
+            vert_tri3 = chart_tris[:,2] == vert
+            neighborhood_selector = numpy.logical_or(numpy.logical_or(vert_tri1, vert_tri2), vert_tri3)
             
-            randangle = random.uniform(0, 2 * math.pi)
-            randslope = math.tan(randangle)
-
-            # y - y1 = m(x - x1)
-            def yfromx(x):
-                return randslope * (x - ucoord) + vcoord
-            def xfromy(y):
-                return ((y - vcoord) / randslope) + ucoord
+            adj_tris = chart_tris[neighborhood_selector]
+            neighborhood_tri3d = tri_3d[neighborhood_selector]
+            neighborhood_tri_2d = tri_2d[neighborhood_selector]
+            neighborhood_L2, origA2d = stretch_metric(neighborhood_tri3d, neighborhood_tri_2d, return_A2d=True, normalize=True)
+            orig_L2 = neighborhood_L2
             
-            xintercept0 = yfromx(0)
-            minx = 0 if 0 < xintercept0 < 1 else xfromy(1)
-            xintercept1 = yfromx(1)
-            maxx = 1 if 0 < xintercept1 < 1 else xfromy(0)
-            minx, maxx = tuple(sorted([minx, maxx]))
+            for iteration in range(1, 11):
             
-            samples = 10.0
-            step = (maxx - minx) / samples
-            for xval in numpy.arange(minx, maxx, step):
-                yval = yfromx(xval)
-                print 'x,y', xval, yval
-                vertexgraph.add_node(vert, u=xval, v=yval)
-                neighborhood_tri_2d = numpy.array([[
-                           [vertexgraph.node[tri[0]]['u'], vertexgraph.node[tri[0]]['v']],
-                           [vertexgraph.node[tri[1]]['u'], vertexgraph.node[tri[1]]['v']],
-                           [vertexgraph.node[tri[2]]['u'], vertexgraph.node[tri[2]]['v']]]
-                          for tri in adj_tris ])
-                neighborhood_L2 = stretch_metric(neighborhood_tri3d, neighborhood_tri_2d, flippedCheck=origA2d)
-                print 'trying L2', neighborhood_L2
+                randangle = random.uniform(0, 2 * math.pi)
+                randslope = math.tan(randangle)
+                #print 'slope', randslope
+    
+                # y - y1 = m(x - x1)
+                def yfromx(x):
+                    return randslope * (x - ucoord) + vcoord
+                def xfromy(y):
+                    return ((y - vcoord) / randslope) + ucoord
+                
+                xintercept0 = yfromx(0)
+                minx = 0.0 if 0 < xintercept0 < 1 else min(xfromy(0), xfromy(1))
+                xintercept1 = yfromx(1)
+                maxx = 1.0 if 0 < xintercept1 < 1 else max(xfromy(0), xfromy(1))
+                minx, maxx = tuple(sorted([minx, maxx]))
+                #print 'min,max', minx, maxx
+                
+                assert(0 <= minx <= maxx <= 1)
+                
+                rangesize = (maxx-minx) / iteration
+                #print 'rangesize', rangesize
+                rangemin = ucoord - rangesize / 2.0
+                rangemax = ucoord + rangesize / 2.0
+                if rangemax > maxx:
+                    rangemin -= (maxx-rangemax)
+                    rangemax -= (maxx-rangemax)
+                if rangemin < minx:
+                    rangemax += (minx-rangemin)
+                    rangemin += (minx-rangemin)
+                if rangemax > maxx:
+                    rangemax = maxx
+                if rangemin < minx:
+                    rangemin = minx
+                
+                if not (0 <= rangemin <= rangemax <= 1):
+                    print 'iteration', iteration
+                    print 'rangesize', rangesize
+                    print 'minx, maxx', minx, maxx
+                    print 'rangemin, rangemax', rangemin, rangemax
+                assert(0 <= rangemin <= rangemax <= 1)
+                
+                samples = 10.0
+                step = (rangemax - rangemin) / samples
+                bestu, bestv = ucoord, vcoord
+                bestL2 = neighborhood_L2
+                for xval in numpy.arange(rangemin, rangemax, step):
+                    yval = yfromx(xval)
+    
+                    tri_2d[vert_tri1,0,0] = xval
+                    tri_2d[vert_tri2,1,0] = xval
+                    tri_2d[vert_tri3,2,0] = xval
+                    tri_2d[vert_tri1,0,1] = yval
+                    tri_2d[vert_tri2,1,1] = yval
+                    tri_2d[vert_tri3,2,1] = yval
+                    
+                    neighborhood_tri_2d = tri_2d[neighborhood_selector]
+                    neighborhood_L2 = stretch_metric(neighborhood_tri3d, neighborhood_tri_2d, flippedCheck=origA2d, normalize=True)
+                    if neighborhood_L2 < bestL2:
+                        bestL2 = neighborhood_L2
+                        bestu, bestv = xval, yval
+                    
+                    #print 'x,y', xval, yval, 'L2', neighborhood_L2
+                
+                #print 'choosing u,v =', bestu, bestv, 'at L2', bestL2
+                tri_2d[vert_tri1,0,0] = bestu
+                tri_2d[vert_tri2,1,0] = bestu
+                tri_2d[vert_tri3,2,0] = bestu
+                tri_2d[vert_tri1,0,1] = bestv
+                tri_2d[vert_tri2,1,1] = bestv
+                tri_2d[vert_tri3,2,1] = bestv
+                
+                ucoord, vcoord = bestu, bestv
+                
+            print 'L2 went from', orig_L2, '->', bestL2
+            vertexgraph.node[vert]['u'], vertexgraph.node[vert]['v'] = ucoord, vcoord
             
-            import sys
-            sys.exit(0)
+        import Image, ImageDraw
+        W, H = 500, 500
+        im = Image.new("RGB", (W,H), (255,255,255))
+        draw = ImageDraw.Draw(im)
+        for edge in vertexgraph.subgraph(unique_verts).edges_iter():
+            pt1, pt2 = edge
+            u1 = vertexgraph.node[pt1]['u']
+            u2 = vertexgraph.node[pt2]['u']
+            v1 = vertexgraph.node[pt1]['v']
+            v2 = vertexgraph.node[pt2]['v']
+            uv1 = ( u1 * W, v1 * H )
+            uv2 = ( u2 * W, v2 * H )
+            draw.ellipse((uv1[0]-5, uv1[1]-5, uv1[0]+5, uv1[1]+5), outline=(0,0,0), fill=(255,0,0))
+            draw.ellipse((uv2[0]-5, uv2[1]-5, uv2[0]+5, uv2[1]+5), outline=(0,0,0), fill=(255,0,0))
+            draw.line([uv1, uv2], fill=(0,0,0))
+        del draw
+        im.show()
+            
+        import sys
+        sys.exit(0)
         
     end_operation()
     print next(t)
