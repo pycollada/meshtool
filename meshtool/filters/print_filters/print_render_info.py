@@ -53,6 +53,9 @@ def getTextureRAM(mesh):
 
 def getSceneInfo(mesh):
     num_triangles = 0
+    num_vertices = 0
+    num_normals = 0
+    num_texcoords = 0
     num_draw_raw = 0
     num_draw_with_instances = 0
     num_draw_with_batching = 0
@@ -77,6 +80,9 @@ def getSceneInfo(mesh):
             if boundprim.material not in material_cache:
                 num_draw_with_batching += 1
                 material_cache[boundprim.material] = None
+            num_vertices += boundprim.vertex_index.size if boundprim.vertex_index is not None else 0
+            num_normals += boundprim.normal_index.size if boundprim.normal_index is not None else 0
+            num_texcoords += boundprim.texcoord_indexset[0].size if boundprim.texcoord_indexset is not None else 0
             if isinstance(boundprim, collada.lineset.BoundLineSet):
                 num_lines += len(boundprim)
             else:
@@ -85,21 +91,29 @@ def getSceneInfo(mesh):
                 num_triangles += len(boundprim)
         geom_name_cache[geom_id] = None
 
-    return (num_triangles, num_draw_raw, num_draw_with_instances, num_draw_with_batching, num_lines)
+    return (num_triangles, num_draw_raw, num_draw_with_instances, num_draw_with_batching, 
+            num_lines, num_vertices, num_normals, num_texcoords)
 
 def getRenderInfo(mesh):
-    num_triangles, num_draw_raw, num_draw_with_instances, num_draw_with_batching, num_lines = getSceneInfo(mesh)
+    num_triangles, num_draw_raw, num_draw_with_instances, num_draw_with_batching, \
+    num_lines, num_vertices, num_normals, num_texcoords = getSceneInfo(mesh)
     return {'texture_ram': getTextureRAM(mesh),
             'num_triangles': num_triangles,
             'num_draw_raw': num_draw_raw,
             'num_draw_with_instances': num_draw_with_instances,
             'num_draw_with_batching': num_draw_with_batching,
-            'num_lines': num_lines}
+            'num_lines': num_lines,
+            'num_vertices' : num_vertices,
+            'num_normals' : num_normals,
+            'num_texcoords' : num_texcoords}
 
 def printRenderInfo(mesh):
     render_info = getRenderInfo(mesh)
     print 'Total texture RAM required: %s' % humanize_bytes(render_info['texture_ram'])
     print 'Total triangles: %d' % render_info['num_triangles']
+    print 'Total vertices: %d' % render_info['num_vertices']
+    print 'Total normals: %d' % render_info['num_normals']
+    print 'Total texcoords: %d' % render_info['num_texcoords']
     print 'Raw number of draw calls: %d' % render_info['num_draw_raw']
     print 'Number of draw calls with instance batching: %d' % render_info['num_draw_with_instances']
     print 'Number of draw calls with instance and material batching: %d' % render_info['num_draw_with_batching']
