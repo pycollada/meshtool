@@ -47,7 +47,7 @@ def gen_color():
         RGB_tuple = colorsys.hsv_to_rgb(*HSV_tuple)
         yield map(lambda x:int(x * 256), RGB_tuple)
 
-def renderCharts(facegraph, verts, lineset=None):
+def renderCharts(facegraph, verts, vert_indices, lineset=None):
     
     from meshtool.filters.panda_filters.pandacore import getVertexData, attachLights, ensureCameraAt
     from meshtool.filters.panda_filters.pandacontrols import KeyboardMovement, MouseDrag, MouseScaleZoom
@@ -65,7 +65,7 @@ def renderCharts(facegraph, verts, lineset=None):
     for chart, data in facegraph.nodes_iter(data=True):
         curcolor = next(colors)
         for tri in data['tris']:
-            triv = verts[tri]
+            triv = verts[vert_indices[tri]]
             vertex.addData3f(triv[0][0], triv[0][1], triv[0][2])
             vertex.addData3f(triv[1][0], triv[1][1], triv[1][2])
             vertex.addData3f(triv[2][0], triv[2][1], triv[2][2])

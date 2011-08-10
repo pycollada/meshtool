@@ -3,7 +3,7 @@ from meshtool.filters.base_filters import *
 import inspect
 import numpy
 import networkx as nx
-from itertools import izip, chain, repeat, imap
+from itertools import chain, combinations
 import datetime
 import math
 import __builtin__
@@ -11,7 +11,11 @@ import heapq
 from render_utils import renderVerts, renderCharts
 from graph_utils import astar_path, dfs_interior_nodes, super_cycle
 import gc
+import sys
 import random
+import collada
+import Image
+import ImageDraw
 
 #python 2.5 set
 if not 'set' in __builtin__.__dict__:
@@ -30,13 +34,20 @@ def timer():
         yield (curtime-begintime)
         begintime = curtime
          
+global_timer = timer()
+         
 def calcPerimeter(pts):
+    """Calculates the perimeter of an area by 
+    summing the distance between the points in
+    a set of edges"""
     dx = pts[:,0,0]-pts[:,1,0]
     dy = pts[:,0,1]-pts[:,1,1]
     dz = pts[:,0,2]-pts[:,1,2]
     return numpy.sum(numpy.sqrt(dx*dx + dy*dy + dz*dz))
 
 def v3dist(pt1, pt2):
+    """Calculates the distance between two 3d points element-wise
+    along an array"""
     d = pt1 - pt2
     return math.sqrt(d[0]*d[0] + d[1]*d[1] + d[2]*d[2])
 
@@ -46,6 +57,17 @@ def array_dot(arr1, arr2):
     return numpy.sqrt( array_mult(arr1, arr2) )
 
 def calcFitError(pts):
+    """
+    Calculates E_fit, which is an error value from
+    
+     - Hierarchical Face Clustering on Polygonal Surfaces
+     - Michael Garland, et al.
+     - See section 3.2
+    
+    Computes the best fit plane through a set of points
+    and then calculates the squared mean distance between
+    the points and the plane as the error value"""
+    
     # this computes the outer product of each vector
     # in the array, element-wise, then sums up the 3x3
     # matrices
@@ -60,18 +82,17 @@ def calcFitError(pts):
     
     # n (normal of best fit plane) is the eigenvector
     # corresponding to the minimum eigenvalue
-    eigvals, eigvecs = numpy.linalg.eig(Z)
+    eigvals, eigvecs = numpy.linalg.eigh(Z)
     n = eigvecs[numpy.argmin(eigvals)]
     
     # d (scalar offset of best fit plane) = -n^T * b / c
     d = numpy.inner(-n, b)
     
     # final error is the square of the mean distance of each point to the plane
-    mean_dist = numpy.mean(numpy.abs(array_mult(n[None,:].repeat(len(pts), axis=0), pts) + d))
+    mean_dist = numpy.mean(numpy.abs(numpy.dot(pts, n) + d))
     Efit = mean_dist * mean_dist
     
     return Efit
-
 
 def tri_areas_3d(arr):
     crosses = numpy.cross(arr[:,0] - arr[:,1], arr[:,0] - arr[:,2])
@@ -83,6 +104,14 @@ def tri_areas_2d(arr):
             ) / 2.0
 
 def stretch_metric(t3d, t2d, return_A2d=False, flippedCheck=None, normalize=False):
+    """
+    Computes the texture stretch metric from
+    
+     - Texture Mapping Progressive Meshes
+     - Pedro V. Sander, et al.
+     - See section 3
+    """
+     
     q1 = t3d[:,0]
     q2 = t3d[:,1]
     q3 = t3d[:,2]
@@ -110,18 +139,17 @@ def stretch_metric(t3d, t2d, return_A2d=False, flippedCheck=None, normalize=Fals
         return L2, A2d
     return L2
 
-def drawChart(chart_tris, border_verts, vertexgraph, face):
-    import Image, ImageDraw
+def drawChart(chart_tris, border_verts, new_uvs, newvert2idx):
     W, H = 500, 500
     im = Image.new("RGB", (W,H), (255,255,255))
     draw = ImageDraw.Draw(im)
     for tri in chart_tris:
         for edge in [(tri[0],tri[1]), (tri[0], tri[2]), (tri[1], tri[2])]:
             pt1, pt2 = edge
-            u1 = vertexgraph.node[pt1]['u'][face]
-            u2 = vertexgraph.node[pt2]['u'][face]
-            v1 = vertexgraph.node[pt1]['v'][face]
-            v2 = vertexgraph.node[pt2]['v'][face]
+            u1 = new_uvs[newvert2idx[pt1]][0]
+            u2 = new_uvs[newvert2idx[pt2]][0]
+            v1 = new_uvs[newvert2idx[pt1]][1]
+            v2 = new_uvs[newvert2idx[pt2]][1]
             uv1 = ( u1 * W, v1 * H )
             uv2 = ( u2 * W, v2 * H )
             color1 = (255,0,0) if pt1 in border_verts else (0,0,255)
@@ -132,41 +160,97 @@ def drawChart(chart_tris, border_verts, vertexgraph, face):
     del draw
     im.show()
 
-def begin_operation():
+def transformblit(src_tri, dst_tri, src_img, dst_img):
+    """Pastes a triangular region from one image
+    into a triangular region in another image by
+    using an affine transformation"""
+    ((x11,x12), (x21,x22), (x31,x32)) = src_tri
+    ((y11,y12), (y21,y22), (y31,y32)) = dst_tri
+
+    minx = min(y11, y21, y31)
+    miny = min(y12, y22, y32)
+    y11 -= minx
+    y21 -= minx
+    y31 -= minx
+    y12 -= miny
+    y22 -= miny
+    y32 -= miny
+    sizex = int(max(y11, y21, y31) + 0.5)
+    sizey = int(max(y12, y22, y32) + 0.5)
+    
+    M = numpy.array([
+                     [y11, y12, 1, 0, 0, 0],
+                     [y21, y22, 1, 0, 0, 0],
+                     [y31, y32, 1, 0, 0, 0],
+                     [0, 0, 0, y11, y12, 1],
+                     [0, 0, 0, y21, y22, 1],
+                     [0, 0, 0, y31, y32, 1]
+                ])
+    
+    y = numpy.array([x11, x21, x31, x12, x22, x32])
+
+    A = numpy.linalg.solve(M, y)
+
+    transformed = src_img.transform((sizex, sizey), Image.AFFINE, A)
+    
+    mask = Image.new('1', (sizex, sizey))
+    maskdraw = ImageDraw.Draw(mask)
+    maskdraw.polygon(((round(y11),round(y12)), (round(y21),round(y22)), (round(y31),round(y32))), fill=255)
+
+    dst_img.paste(transformed, (int(minx-0.5), int(miny-0.5)), mask=mask)
+
+def begin_operation(message):
+    print message,
+    sys.stdout.flush()
     gc.disable()
 def end_operation():
+    print next(global_timer)
     gc.enable()
 
 def sandler_simplify(mesh):
     all_vertices = []
-    all_indices = []
-    vertex_offset = 0
-    t = timer()
+    all_normals = []
+    all_orig_uvs = []
     
-    print 'building aggregated vertex and triangle list...',
-    begin_operation()
-    for boundgeom in mesh.scene.objects('geometry'):
+    all_vert_indices = []
+    all_normal_indices = []
+    all_orig_uv_indices = []
+    
+    vertex_offset = 0
+    normal_offset = 0
+    origuv_offset = 0
+    
+    global_timer = timer()
+    
+    begin_operation('building aggregated vertex and triangle list...')
+    for boundgeom in chain(mesh.scene.objects('geometry'), mesh.scene.objects('controller')):
+        if isinstance(boundgeom, collada.controller.BoundController):
+            boundgeom = boundgeom.geometry
         for boundprim in boundgeom.primitives():
             all_vertices.append(boundprim.vertex)
-            all_indices.append(boundprim.vertex_index + vertex_offset)
+            all_normals.append(boundprim.normal)
+            all_orig_uvs.append(boundprim.texcoordset[0])
+            
+            all_vert_indices.append(boundprim.vertex_index + vertex_offset)
             vertex_offset += len(boundprim.vertex)
-    for boundcontroller in mesh.scene.objects('controller'):
-        boundgeom = boundcontroller.geometry
-        for boundprim in boundgeom.primitives():
-            all_vertices.append(boundprim.vertex)
-            all_indices.append(boundprim.vertex_index + vertex_offset)
-            vertex_offset += len(boundprim.vertex)
+            all_normal_indices.append(boundprim.normal_index + normal_offset)
+            normal_offset += len(boundprim.normal)
+            all_orig_uv_indices.append(boundprim.texcoord_indexset[0] + origuv_offset)
+            origuv_offset += len(boundprim.texcoordset[0])
             
     all_vertices = numpy.concatenate(all_vertices)
-    all_indices = numpy.concatenate(all_indices)
+    all_normals = numpy.concatenate(all_normals)
+    all_orig_uvs = numpy.concatenate(all_orig_uvs)
+    all_vert_indices = numpy.concatenate(all_vert_indices)
+    all_normal_indices = numpy.concatenate(all_normal_indices)
+    all_orig_uv_indices = numpy.concatenate(all_orig_uv_indices)
+
     end_operation()
-    print next(t)
     
-    print 'uniqifying the list...',
-    begin_operation()
+    begin_operation('uniqifying the list...')
     unique_data, index_map = numpy.unique(all_vertices.view([('',all_vertices.dtype)]*all_vertices.shape[1]), return_inverse=True)
     all_vertices = unique_data.view(all_vertices.dtype).reshape(-1,all_vertices.shape[1])
-    all_indices = index_map[all_indices]
+    all_vert_indices = index_map[all_vert_indices]
     
     #scale to known range so error values are normalized
     all_vertices[:,0] -= numpy.min(all_vertices[:,0])
@@ -175,75 +259,68 @@ def sandler_simplify(mesh):
     all_vertices *= 1000.0 / numpy.max(all_vertices)
     
     end_operation()
-    print next(t)
     
-    print 'building vertex vertices...',
-    begin_operation()
+    begin_operation('building vertex vertices...')
     vertexgraph = nx.Graph()
     vertexgraph.add_nodes_from(xrange(len(all_vertices)))
     end_operation()
-    print next(t)
     
-    print 'building vertex edges...',
-    begin_operation()
-    vertexgraph.add_edges_from(all_indices[:,(0,1)])
-    vertexgraph.add_edges_from(all_indices[:,(0,2)])
-    vertexgraph.add_edges_from(all_indices[:,(1,2)])
+    begin_operation('building vertex edges...')
+    vertexgraph.add_edges_from(all_vert_indices[:,(0,1)])
+    vertexgraph.add_edges_from(all_vert_indices[:,(0,2)])
+    vertexgraph.add_edges_from(all_vert_indices[:,(1,2)])
     
     vertexgraph.add_nodes_from(( (edge[0], {facenum: True})
                                  for facenum, edge in
-                                 enumerate(all_indices[:,(0,1)]) ))
+                                 enumerate(all_vert_indices[:,(0,1)]) ))
     vertexgraph.add_nodes_from(( (edge[0], {facenum: True})
                                  for facenum, edge in
-                                 enumerate(all_indices[:,(0,2)]) ))
+                                 enumerate(all_vert_indices[:,(0,2)]) ))
     vertexgraph.add_nodes_from(( (edge[0], {facenum: True})
                                  for facenum, edge in
-                                 enumerate(all_indices[:,(1,2)]) ))
+                                 enumerate(all_vert_indices[:,(1,2)]) ))
     vertexgraph.add_nodes_from(( (edge[1], {facenum: True})
                                  for facenum, edge in
-                                 enumerate(all_indices[:,(0,1)]) ))
+                                 enumerate(all_vert_indices[:,(0,1)]) ))
     vertexgraph.add_nodes_from(( (edge[1], {facenum: True})
                                  for facenum, edge in
-                                 enumerate(all_indices[:,(0,2)]) ))
+                                 enumerate(all_vert_indices[:,(0,2)]) ))
     vertexgraph.add_nodes_from(( (edge[1], {facenum: True})
                                  for facenum, edge in
-                                 enumerate(all_indices[:,(1,2)]) ))
+                                 enumerate(all_vert_indices[:,(1,2)]) ))
     end_operation()
-    print next(t)
     
-    print 'number of faces', len(all_indices)
+    print 'number of faces', len(all_vert_indices)
     print 'number of connected components in vertex graph =', nx.algorithms.components.connected.number_connected_components(vertexgraph)
     
-    print 'building face vertices...',
-    begin_operation()
+    begin_operation('building face vertices...')
     facegraph = nx.Graph()
-    facegraph.add_nodes_from(( (i, {'tris':[tri], 
+    facegraph.add_nodes_from(( (i, {'tris':[i], 
                                     'edges':set([tuple(sorted([tri[0], tri[1]])),
                                                  tuple(sorted([tri[1], tri[2]])),
                                                  tuple(sorted([tri[0], tri[2]]))])})
                                for i, tri in
-                               enumerate(all_indices) ))
+                               enumerate(all_vert_indices) ))
     end_operation()
-    print next(t)
     
-    print 'building face edges...',
-    begin_operation()
+    begin_operation('building face edges...')
+    invalid_edges = set()
     for (v1, v2) in vertexgraph.edges_iter():
         adj_v1 = set(vertexgraph.node[v1].keys())
         adj_v2 = set(vertexgraph.node[v2].keys())
         adj_both = adj_v1.intersection(adj_v2)
-        if len(adj_both) == 2:
-            facegraph.add_edge(*adj_both)
-        elif len(adj_both) > 2:
-            print 'WTF'
+        if len(adj_both) < 2:
+            continue
+        for (f1, f2) in combinations(adj_both, 2):
+            facegraph.add_edge(f1, f2)
+        if len(adj_both) > 2:
+            invalid_edges.add(tuple(sorted([v1, v2])))
     end_operation()
-    print next(t)
     
     merge_priorities = []
     maxerror = 0
     
-    print 'calculating error...',
-    begin_operation()
+    begin_operation('calculating error...')
     for v1, v2 in facegraph.edges_iter():
         edges1 = facegraph.node[v1]['edges']
         edges2 = facegraph.node[v2]['edges']
@@ -254,17 +331,13 @@ def sandler_simplify(mesh):
             if error > maxerror: maxerror = error
             merge_priorities.append((error, (v1, v2)))
     end_operation()
-    print next(t)
         
-    print 'creating priority queue...',
-    begin_operation()
+    begin_operation('creating priority queue...')
     heapq.heapify(merge_priorities)
     end_operation()
-    print next(t)
     
-    print 'merging charts...',
-    begin_operation()
-    node_count = len(all_indices)
+    begin_operation('merging charts...')
+    node_count = len(all_vert_indices)
     while len(merge_priorities) > 0:
         (error, (face1, face2)) = heapq.heappop(merge_priorities)
         
@@ -275,6 +348,9 @@ def sandler_simplify(mesh):
         edges1 = facegraph.node[face1]['edges']
         edges2 = facegraph.node[face2]['edges']
         combined_edges = edges1.symmetric_difference(edges2)
+
+        if len(invalid_edges) > 0 and len(combined_edges.intersection(invalid_edges)) > 0:
+            continue
 
         #check if boundary is more than one connected component
         connected_components_graph = nx.from_edgelist(combined_edges)
@@ -400,32 +476,26 @@ def sandler_simplify(mesh):
         facegraph.remove_node(face2)
 
     end_operation()
-    print next(t)
     
     print 'final number of faces =', len(facegraph)
     print 'final number of connected components =', nx.algorithms.components.connected.number_connected_components(facegraph)
     
     #renderCharts(facegraph, all_vertices)
     
-    print 'updating corners...',
-    begin_operation()
+    begin_operation('updating corners...')
     for face, facedata in facegraph.nodes_iter(data=True):
         edges = facegraph.node[face]['edges']
         vertices = set(chain.from_iterable(edges))
         corners = set((v for v in vertices if len(vertexgraph.node[v]) >= 3))
         facegraph.node[face]['corners'] = corners
     end_operation()
-    print next(t)
     
-    print 'computing distance between points',
-    begin_operation()
+    begin_operation('computing distance between points')
     for v1, v2 in vertexgraph.edges_iter():
         vertexgraph.add_edge(v1, v2, distance=v3dist(all_vertices[v1],all_vertices[v2]))
     end_operation()
-    print next(t)
 
-    print 'straightening chart boundaries...',
-    begin_operation()
+    begin_operation('straightening chart boundaries...')
     for (face1, face2) in facegraph.edges_iter():
         
         #can't straighten the border of a single triangle
@@ -436,7 +506,6 @@ def sandler_simplify(mesh):
         
         edges1 = facegraph.node[face1]['edges']
         edges2 = facegraph.node[face2]['edges']
-        combined_edges = edges1.symmetric_difference(edges2)
         shared_edges = edges1.intersection(edges2)
         
         #dont bother trying to straighten a single edge
@@ -449,7 +518,7 @@ def sandler_simplify(mesh):
         combined_corners = corners1.intersection(corners2).intersection(shared_vertices)
         
         if len(combined_corners) < 1 or len(combined_corners) > 2:
-            print 'warn combined corners wrong'
+            print 'warn combined corners wrong', len(combined_corners)
             continue
         
         giveup = False
@@ -492,9 +561,10 @@ def sandler_simplify(mesh):
         
         edges1 = edges1.symmetric_difference(shared_edges)
         edges2 = edges2.symmetric_difference(shared_edges)
-        all_verts1 = set(chain.from_iterable(tris1))
-        all_verts2 = set(chain.from_iterable(tris2))
-        stop_nodes = all_verts1.intersection(all_verts2)
+        all_verts1 = set(chain.from_iterable(all_vert_indices[tris1]))
+        all_verts2 = set(chain.from_iterable(all_vert_indices[tris2]))
+        stop_nodes = all_verts1.intersection(all_verts2).difference(shared_vertices)
+        stop_nodes = stop_nodes.union(set(chain.from_iterable(edges1)), set(chain.from_iterable(edges2)))
         constrained_set = all_verts1.union(all_verts2)
         
         try:
@@ -502,6 +572,7 @@ def sandler_simplify(mesh):
                                            heuristic=lambda x,y: v3dist(all_vertices[x], all_vertices[y]),
                                            weight='distance', subset=constrained_set, exclude=stop_nodes)
         except nx.exception.NetworkXNoPath:
+            print 'warn no path'
             continue
         
         # if we already have the shortest path, nothing to do
@@ -521,6 +592,7 @@ def sandler_simplify(mesh):
         # it was because the cost was too high or it would violate one of
         # the constraints, so just ignore this 
         if len(new_edges1) == 0 or len(new_edges2) == 0:
+            print 'warn new edges 0'
             continue
         
         boundary1 = set(chain.from_iterable(new_edges1))
@@ -541,14 +613,15 @@ def sandler_simplify(mesh):
         
         vertexset1 = set(allin1).union(vertexset1).union(straightened_path)
         vertexset2 = set(allin2).union(vertexset2).union(straightened_path)
+        combined_tris = tris1 + tris2
         tris1 = []
         tris2 = []
         trisneither = []
-        combined_tris = tris1 + tris2
         for tri in combined_tris:
-            if tri[0] in vertexset1 and tri[1] in vertexset1 and tri[2] in vertexset1:
+            trivals = all_vert_indices[tri]
+            if trivals[0] in vertexset1 and trivals[1] in vertexset1 and trivals[2] in vertexset1:
                 tris1.append(tri)
-            elif tri[0] in vertexset2 and tri[1] in vertexset2 and tri[2] in vertexset2:
+            elif trivals[0] in vertexset2 and trivals[1] in vertexset2 and trivals[2] in vertexset2:
                 tris2.append(tri)
             else:
                 trisneither.append(tri)
@@ -564,6 +637,7 @@ def sandler_simplify(mesh):
         # it was because the cost was too high or it would violate one of
         # the constraints, so just ignore this 
         if len(tris1) == 0 or len(tris2) == 0:
+            print 'warn one was 0'
             continue
         
         #this can happen if the straightened path cuts off another face's edges
@@ -571,19 +645,35 @@ def sandler_simplify(mesh):
             print 'warn cutoff'
             continue
 
-        facegraph.add_edge(face1, face2)
+        #if we stole edges from one face to the other, fix it
+        for otherface in facegraph.neighbors_iter(face1):
+            if otherface == face2:
+                continue
+            otheredges = facegraph.node[otherface]['edges']
+            face1otheredges = otheredges.intersection(new_edges1)
+            if len(face1otheredges) == 0:
+                print 'warn otherone subsumed'
+        for otherface in facegraph.neighbors_iter(face2):
+            if otherface == face1:
+                continue
+            otheredges = facegraph.node[otherface]['edges']
+            face2otheredges = otheredges.intersection(new_edges2)
+            if len(face2otheredges) == 0:
+                print 'warn otherone subsumed'
+            
         facegraph.add_node(face1, tris=tris1, edges=new_edges1)
         facegraph.add_node(face2, tris=tris2, edges=new_edges2)
         
     end_operation()
-    print next(t)
     
-    renderCharts(facegraph, all_vertices)
-    print 'forming initial chart parameterizations...',
-    begin_operation()
+    begin_operation('forming initial chart parameterizations...')
+    new_uv_indices = numpy.zeros(shape=(len(all_vert_indices), 3), dtype=numpy.int32)
+    new_uvs = []
+    new_uvs_offset = 0
+    
     for (face, facedata) in facegraph.nodes_iter(data=True):
         border_edges = facedata['edges']
-        chart_tris = facedata['tris']
+        chart_tris = all_vert_indices[facedata['tris']]
 
         unique_verts = set(chain.from_iterable(chart_tris))
         border_verts = set(chain.from_iterable(border_edges))
@@ -601,16 +691,13 @@ def sandler_simplify(mesh):
         for (v1, v2) in boundary_path:
             total_dist += v3dist(all_vertices[v1], all_vertices[v2])
         
+        vert2uv = {}
         curangle = 0
         for edge in boundary_path:
             angle = v3dist(all_vertices[edge[0]], all_vertices[edge[1]]) / total_dist
             curangle += angle * 2 * math.pi
             x, y = (math.sin(curangle) + 1) / 2.0, (math.cos(curangle) + 1.0) / 2.0
-            if 'u' in vertexgraph.node[edge[0]]:
-                vertexgraph.node[edge[0]]['u'][face] = x
-                vertexgraph.node[edge[0]]['v'][face] = y
-            else:
-                vertexgraph.add_node(edge[0], u={face:x}, v={face:y})
+            vert2uv[edge[0]] = (x,y)
         
         if len(interior_verts) > 0:
         
@@ -630,12 +717,12 @@ def sandler_simplify(mesh):
                 
                 edgelen = v3dist(all_vertices[v1], all_vertices[v2])
                 if v1 in border_verts:
-                    Bu[vert2idx[v2]] += edgelen * vertexgraph.node[v1]['u'][face]
-                    Bv[vert2idx[v2]] += edgelen * vertexgraph.node[v1]['v'][face]
+                    Bu[vert2idx[v2]] += edgelen * vert2uv[v1][0]
+                    Bv[vert2idx[v2]] += edgelen * vert2uv[v1][1]
                     sumu[vert2idx[v2]] += edgelen
                 elif v2 in border_verts:
-                    Bu[vert2idx[v1]] += edgelen * vertexgraph.node[v2]['u'][face]
-                    Bv[vert2idx[v1]] += edgelen * vertexgraph.node[v2]['v'][face]
+                    Bu[vert2idx[v1]] += edgelen * vert2uv[v2][0]
+                    Bv[vert2idx[v1]] += edgelen * vert2uv[v2][1]
                     sumu[vert2idx[v1]] += edgelen
                 else:
                     A[vert2idx[v1]][vert2idx[v2]] = -1 * edgelen
@@ -655,33 +742,32 @@ def sandler_simplify(mesh):
             interior_us = numpy.linalg.solve(A, Bu)
             interior_vs = numpy.linalg.solve(A, Bv)
             for (i, (u, v)) in enumerate(zip(interior_us, interior_vs)):
-                if 'u' in vertexgraph.node[interior_verts[i]]:
-                    vertexgraph.node[interior_verts[i]]['u'][face] = u[0]
-                    vertexgraph.node[interior_verts[i]]['v'][face] = v[0]
-                else:
-                    vertexgraph.add_node(interior_verts[i], u={face:u[0]}, v={face:v[0]}, stretch=0)
+                vert2uv[interior_verts[i]] = (u[0], v[0])
+                
+        new_uvs.append(vert2uv.values())
+        newvert2idx = dict(zip(vert2uv.keys(), range(new_uvs_offset, new_uvs_offset + len(vert2uv))))
+        for tri in facedata['tris']:
+            for i, v in enumerate(all_vert_indices[tri]):
+                new_uv_indices[tri][i] = newvert2idx[v]
+        new_uvs_offset += len(vert2uv)
+        facegraph.node[face]['vert2uvidx'] = newvert2idx
+        
+    new_uvs = numpy.concatenate(new_uvs)
         
     end_operation()
-    print next(t)
     
-    print 'optimizing chart parameterizations...',
-    begin_operation()
+    begin_operation('optimizing chart parameterizations...')
+    total_L2 = 0
     for (face, facedata) in facegraph.nodes_iter(data=True):
         border_edges = facedata['edges']
-        chart_tris = numpy.array(facedata['tris'])
+        newvert2idx = facegraph.node[face]['vert2uvidx']
+        chart_tris = all_vert_indices[facedata['tris']]
         tri_3d = all_vertices[chart_tris]
-        tri_2d = numpy.array([[
-                   [vertexgraph.node[tri[0]]['u'][face], vertexgraph.node[tri[0]]['v'][face]],
-                   [vertexgraph.node[tri[1]]['u'][face], vertexgraph.node[tri[1]]['v'][face]],
-                   [vertexgraph.node[tri[2]]['u'][face], vertexgraph.node[tri[2]]['v'][face]]]
-                  for tri in chart_tris ])
+        tri_2d = new_uvs[new_uv_indices[facedata['tris']]]
         
         unique_verts, index_map = numpy.unique(chart_tris, return_inverse=True)
-        border_verts = set(chain.from_iterable(border_edges))
-        
-        #origL2norm = stretch_metric(tri_3d, tri_2d, normalize=True)
-        
         index_map.shape = chart_tris.shape
+        border_verts = set(chain.from_iterable(border_edges))
         
         for iteration in range(1, 11):
         
@@ -698,7 +784,7 @@ def sandler_simplify(mesh):
                 if vert in border_verts:
                     continue
                 
-                ucoord, vcoord = vertexgraph.node[vert]['u'][face], vertexgraph.node[vert]['v'][face]
+                ucoord, vcoord = new_uvs[newvert2idx[vert]]
                 
                 vert_tri1 = chart_tris[:,0] == vert
                 vert_tri2 = chart_tris[:,1] == vert
@@ -769,13 +855,33 @@ def sandler_simplify(mesh):
                 
                 ucoord, vcoord = bestu, bestv
 
-                vertexgraph.node[vert]['u'][face], vertexgraph.node[vert]['v'][face] = ucoord, vcoord
-    
-        #afterL2norm = stretch_metric(tri_3d, tri_2d, normalize=True)
-        #print 'face', face, 'L2', origL2norm, '->', afterL2norm
+                new_uvs[newvert2idx[vert],0] = ucoord
+                new_uvs[newvert2idx[vert],1] = vcoord
+        
+        chart_L2 = stretch_metric(tri_3d, tri_2d, normalize=True)
+        total_L2 += chart_L2
+        facegraph.node[face]['L2'] = chart_L2
         
     end_operation()
-    print next(t)
+    
+    begin_operation('sizing charts...')
+    assert(len(mesh.images) == 1)
+    origtexture = mesh.images[0].pilimage
+    for face, facedata in facegraph.nodes_iter(data=True):
+        TEXTURE_SIZE = 1024.0 * 1024.0
+        relsize = int(math.sqrt((facedata['L2'] / total_L2) * TEXTURE_SIZE))
+        chartim = Image.new('RGB', (relsize, relsize))
+        for tri in facedata['tris']:
+            prevuvs = all_orig_uvs[all_orig_uv_indices[tri]]
+            newuvs = new_uvs[new_uv_indices[tri]]
+            prevu = prevuvs[:,0] * origtexture.size[0]
+            prevv = prevuvs[:,1] * origtexture.size[1]
+            newu = newuvs[:,0] * relsize
+            newv = newuvs[:,1] * relsize
+            prevtri = [(prevu[0], prevv[0]), (prevu[1], prevv[1]), (prevu[2], prevv[2])]
+            newtri = [(newu[0], newv[0]), (newu[1], newv[1]), (newu[2], newv[2])]
+            transformblit(prevtri, newtri, origtexture, chartim)
+    end_operation()
     
     return mesh
 
