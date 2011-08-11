@@ -16,6 +16,9 @@ import random
 import collada
 import Image
 import ImageDraw
+from meshtool.filters.atlas_filters.rectpack import RectPack
+from StringIO import StringIO
+import meshtool.filters
 
 #python 2.5 set
 if not 'set' in __builtin__.__dict__:
@@ -195,7 +198,7 @@ def transformblit(src_tri, dst_tri, src_img, dst_img):
     
     mask = Image.new('1', (sizex, sizey))
     maskdraw = ImageDraw.Draw(mask)
-    maskdraw.polygon(((round(y11),round(y12)), (round(y21),round(y22)), (round(y31),round(y32))), fill=255)
+    maskdraw.polygon(((y11,y12), (y21,y22), (y31,y32)), outline=255, fill=255)
 
     dst_img.paste(transformed, (int(minx-0.5), int(miny-0.5)), mask=mask)
 
@@ -230,7 +233,7 @@ def sandler_simplify(mesh):
             all_vertices.append(boundprim.vertex)
             all_normals.append(boundprim.normal)
             all_orig_uvs.append(boundprim.texcoordset[0])
-            
+
             all_vert_indices.append(boundprim.vertex_index + vertex_offset)
             vertex_offset += len(boundprim.vertex)
             all_normal_indices.append(boundprim.normal_index + normal_offset)
@@ -666,6 +669,8 @@ def sandler_simplify(mesh):
         
     end_operation()
     
+    #renderCharts(facegraph, all_vertices, all_vert_indices)
+    
     begin_operation('forming initial chart parameterizations...')
     new_uv_indices = numpy.zeros(shape=(len(all_vert_indices), 3), dtype=numpy.int32)
     new_uvs = []
@@ -864,23 +869,101 @@ def sandler_simplify(mesh):
         
     end_operation()
     
-    begin_operation('sizing charts...')
+    begin_operation('resizing and creating charts...')
     assert(len(mesh.images) == 1)
     origtexture = mesh.images[0].pilimage
+    TEXTURE_DIMENSION = 1024
+    TEXTURE_SIZE = TEXTURE_DIMENSION * TEXTURE_DIMENSION
+    rp = RectPack(TEXTURE_DIMENSION*2, TEXTURE_DIMENSION*2)
+    chart_ims = {}
     for face, facedata in facegraph.nodes_iter(data=True):
-        TEXTURE_SIZE = 1024.0 * 1024.0
         relsize = int(math.sqrt((facedata['L2'] / total_L2) * TEXTURE_SIZE))
         chartim = Image.new('RGB', (relsize, relsize))
         for tri in facedata['tris']:
             prevuvs = all_orig_uvs[all_orig_uv_indices[tri]]
             newuvs = new_uvs[new_uv_indices[tri]]
             prevu = prevuvs[:,0] * origtexture.size[0]
-            prevv = prevuvs[:,1] * origtexture.size[1]
+            prevv = (1.0-prevuvs[:,1]) * origtexture.size[1]
             newu = newuvs[:,0] * relsize
-            newv = newuvs[:,1] * relsize
+            newv = (1.0-newuvs[:,1]) * relsize
             prevtri = [(prevu[0], prevv[0]), (prevu[1], prevv[1]), (prevu[2], prevv[2])]
             newtri = [(newu[0], newv[0]), (newu[1], newv[1]), (newu[2], newv[2])]
             transformblit(prevtri, newtri, origtexture, chartim)
+        chart_ims[face] = chartim
+        rp.addRectangle(face, relsize, relsize)
+    assert(rp.pack())
+    end_operation()
+
+    begin_operation('Packing charts into atlas and mapping texcoords...')
+    atlasimg = Image.new('RGB', (rp.width, rp.height))
+    for face, chartim in chart_ims.iteritems():
+        x,y,w,h = rp.getPlacement(face)
+        atlasimg.paste(chartim, (x,y,x+w,y+h))
+        x,y,w,h,width,height = (float(i) for i in (x,y,w,h,rp.width,rp.height))
+
+        chart_tris = facegraph.node[face]['tris']
+        chart_idx = numpy.unique(new_uv_indices[chart_tris])
+        
+        #this computes the coordinates of the lowest and highest texel
+        # if the texcoords go outside that range, rescale so they are inside
+        # suggestion by nvidia texture atlasing white paper
+        minx, maxx = numpy.min(new_uvs[chart_idx,0]), numpy.max(new_uvs[chart_idx,0])
+        miny, maxy = numpy.min(new_uvs[chart_idx,1]), numpy.max(new_uvs[chart_idx,1])
+        lowest_x = 0.5 / w
+        lowest_y = 0.5 / h
+        highest_x = 1.0 - lowest_x
+        highest_y = 1.0 - lowest_y
+        if minx < lowest_x or maxx > highest_x:
+            new_uvs[chart_idx,0] = new_uvs[chart_idx,0] * (highest_x - lowest_x) + lowest_x
+        if miny < lowest_y or maxy > highest_y:
+            new_uvs[chart_idx,1] = new_uvs[chart_idx,1] * (highest_y - lowest_y) + lowest_y
+
+        #this rescales the texcoords to map to the new atlas location
+        new_uvs[chart_idx,0] = new_uvs[chart_idx,0] * (w / width) + (x / (width-1))
+        new_uvs[chart_idx,1] = new_uvs[chart_idx,1] * (h / height) + (1.0 - (y+h)/height)
+    end_operation()
+    
+    begin_operation('Saving mesh...')
+    newmesh = collada.Collada()
+    
+    cimg = collada.material.CImage("sander-simplify-packed-atlas", "./atlas.jpg")
+    imgout = StringIO()
+    atlasimg.save(imgout, format="JPEG", quality=95, optimize=True)
+    cimg.setData(imgout.getvalue())
+    newmesh.images.append(cimg)
+    
+    surface = collada.material.Surface("sander-simplify-surface", cimg)
+    sampler = collada.material.Sampler2D("sander-simplify-sampler", surface)
+    map = collada.material.Map(sampler, "TEX0")
+    effect = collada.material.Effect("sander-simplify-effect", [surface, sampler], "blinn", diffuse=map)
+    newmesh.effects.append(effect)
+    material = collada.material.Material("sander-simplify-material0", "sander-simplify-material", effect)
+    newmesh.materials.append(material)
+    
+    vert_src = collada.source.FloatSource("sander-verts-array", all_vertices, ('X', 'Y', 'Z'))
+    normal_src = collada.source.FloatSource("sander-normals-array", all_normals, ('X', 'Y', 'Z'))
+    uv_src = collada.source.FloatSource("sander-uv-array", new_uvs, ('S', 'T'))
+    geom = collada.geometry.Geometry(newmesh, "sander-geometry-0", "sander-mesh", [vert_src, normal_src, uv_src])
+    
+    input_list = collada.source.InputList()
+    input_list.addInput(0, 'VERTEX', '#sander-verts-array')
+    input_list.addInput(1, 'NORMAL', '#sander-normals-array')
+    input_list.addInput(2, 'TEXCOORD', '#sander-uv-array')
+    
+    new_index = numpy.dstack((all_vert_indices, all_normal_indices, new_uv_indices)).flatten()
+    triset = geom.createTriangleSet(new_index, input_list, "materialref")
+    geom.primitives.append(triset)
+    newmesh.geometries.append(geom)
+    
+    matnode = collada.scene.MaterialNode("materialref", material, inputs=[('TEX0', 'TEXCOORD', '0')])
+    geomnode = collada.scene.GeometryNode(geom, [matnode])
+    node = collada.scene.Node("node0", children=[geomnode])
+    
+    myscene = collada.scene.Scene("myscene", [node])
+    newmesh.scenes.append(myscene)
+    newmesh.scene = myscene
+    savezip = meshtool.filters.factory.getInstance('save_collada_zip')
+    savezip.apply(newmesh, '/tmp/test.zip')
     end_operation()
     
     return mesh
