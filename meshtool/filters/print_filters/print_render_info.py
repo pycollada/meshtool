@@ -82,7 +82,7 @@ def getSceneInfo(mesh):
                 material_cache[boundprim.material] = None
             num_vertices += boundprim.vertex_index.size if boundprim.vertex_index is not None else 0
             num_normals += boundprim.normal_index.size if boundprim.normal_index is not None else 0
-            num_texcoords += boundprim.texcoord_indexset[0].size if boundprim.texcoord_indexset is not None else 0
+            num_texcoords += boundprim.texcoord_indexset[0].size if boundprim.texcoord_indexset is not None and len(boundprim.texcoord_indexset) > 0 else 0
             if isinstance(boundprim, collada.lineset.BoundLineSet):
                 num_lines += len(boundprim)
             else:
