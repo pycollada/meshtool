@@ -43,7 +43,10 @@ def getTextureRAM(mesh):
                 continue
             
             t = Texture()
-            success = t.readDds(StringStream(imgdata))
+            try:
+                success = t.readDds(StringStream(imgdata))
+            except:
+                success = 1
             if success == 0:
                 #failed to load as DDS, so let's give up
                 continue
