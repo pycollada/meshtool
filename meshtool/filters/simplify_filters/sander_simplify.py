@@ -1002,9 +1002,12 @@ class SanderSimplify(object):
         
         self.all_corners = set()
         self.all_edge_verts = set()
+        self.tri2face = {}
         for face, facedata in self.facegraph.nodes_iter(data=True):
             self.all_corners = self.all_corners.union(facedata['corners'])
             self.all_edge_verts = self.all_edge_verts.union(set(chain.from_iterable(facedata['edges'])))
+            for tri in facedata['tris']:
+                self.tri2face[tri] = face
 
         self.vertexgraph.add_nodes_from(( (i, {'tris':[]}) for i in xrange(len(self.all_vertices))))
         for i, (v1,v2,v3) in enumerate(self.all_vert_indices):
@@ -1023,34 +1026,30 @@ class SanderSimplify(object):
                 #need to preserve boundary straightness
                 if v2 in self.all_edge_verts and v1 not in self.all_edge_verts:
                     continue
-                
-                v1tris = self.vertexgraph.node[v1]['tris']
+
                 v2tris = self.vertexgraph.node[v2]['tris']
-                v1tri_idx = self.all_vert_indices[v1tris]
                 v2tri_idx = self.all_vert_indices[v2tris]
                 
                 moved = set()
                 degenerate = set()
-                for t1, t1_idx in izip(v1tris, v1tri_idx):
-                    if v2 in t1_idx:
-                        degenerate.add(t1)
-                    else:
-                        moved.add(t1)
                 for t2, t2_idx in izip(v2tris, v2tri_idx):
                     if v1 in t2_idx:
                         degenerate.add(t2)
                     else:
                         moved.add(t2)
-                
+
                 print
                 print 'v1', v1
                 print 'v2', v2
-                print 'v1tris', v1tris
                 print 'v2tris', v2tris
-                print 'v1tri_idx', v1tri_idx
                 print 'v2tri_idx', v2tri_idx
                 print 'moved', self.all_vert_indices[list(moved)]
                 print 'degenerate', self.all_vert_indices[list(degenerate)]
+                
+                print 'moved trinums', moved
+                
+                for m in moved:
+                    print m, self.tri2face[m]
                 
                 import sys
                 sys.exit(0)
