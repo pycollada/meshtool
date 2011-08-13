@@ -906,12 +906,12 @@ class SanderSimplify(object):
 
     def resize_charts(self):
         self.begin_operation('(Step 3 of 7) Resizing and creating charts...')
-        assert(len(self.mesh.images) == 1)
-        origtexture = self.mesh.images[0].pilimage
+        #assert(len(self.mesh.images) == 1)
+        #origtexture = self.mesh.images[0].pilimage
         TEXTURE_DIMENSION = 1024
         TEXTURE_SIZE = TEXTURE_DIMENSION * TEXTURE_DIMENSION
-        rp = RectPack(TEXTURE_DIMENSION*2, TEXTURE_DIMENSION*2)
-        self.chart_ims = {}
+        #rp = RectPack(TEXTURE_DIMENSION*2, TEXTURE_DIMENSION*2)
+        #self.chart_ims = {}
         for face, facedata in self.facegraph.nodes_iter(data=True):
             relsize = int(math.sqrt((facedata['L2'] / self.total_L2) * TEXTURE_SIZE))
             
@@ -919,21 +919,26 @@ class SanderSimplify(object):
             relsize = int(math.pow(2, round(math.log(relsize, 2))))
             self.facegraph.node[face]['chartsize'] = relsize
             
-            chartim = Image.new('RGB', (relsize, relsize))
-            for tri in facedata['tris']:
-                prevuvs = self.all_orig_uvs[self.all_orig_uv_indices[tri]]
-                newuvs = self.new_uvs[self.new_uv_indices[tri]]
-                prevu = prevuvs[:,0] * origtexture.size[0]
-                prevv = (1.0-prevuvs[:,1]) * origtexture.size[1]
-                newu = (newuvs[:,0] * (relsize-0.5))
-                newv = ((1.0-newuvs[:,1]) * (relsize-0.5))
-                prevtri = [(prevu[0], prevv[0]), (prevu[1], prevv[1]), (prevu[2], prevv[2])]
-                newtri = [(newu[0], newv[0]), (newu[1], newv[1]), (newu[2], newv[2])]
-                transformblit(prevtri, newtri, origtexture, chartim)
-            self.chart_ims[face] = chartim
-            rp.addRectangle(face, relsize, relsize)
-        assert(rp.pack())
-        self.chart_packing = rp
+            toupdate = self.new_uv_indices[facedata['tris']]
+
+            self.new_uvs[toupdate, 0] = self.new_uvs[toupdate, 0] * (relsize-0.5)
+            self.new_uvs[toupdate, 1] = ((1.0-self.new_uvs[toupdate, 1]) * (relsize-0.5))
+            
+            #chartim = Image.new('RGB', (relsize, relsize))
+            #for tri in facedata['tris']:
+                #prevuvs = self.all_orig_uvs[self.all_orig_uv_indices[tri]]
+                #newuvs = self.new_uvs[self.new_uv_indices[tri]]
+                #prevu = prevuvs[:,0] * origtexture.size[0]
+                #prevv = (1.0-prevuvs[:,1]) * origtexture.size[1]
+                #newu = (newuvs[:,0] * (relsize-0.5))
+                #newv = ((1.0-newuvs[:,1]) * (relsize-0.5))
+                #prevtri = [(prevu[0], prevv[0]), (prevu[1], prevv[1]), (prevu[2], prevv[2])]
+                #newtri = [(newu[0], newv[0]), (newu[1], newv[1]), (newu[2], newv[2])]
+                #transformblit(prevtri, newtri, origtexture, chartim)
+            #self.chart_ims[face] = chartim
+            #rp.addRectangle(face, relsize, relsize)
+        #assert(rp.pack())
+        #self.chart_packing = rp
         
         self.end_operation()
 
@@ -1037,22 +1042,47 @@ class SanderSimplify(object):
                         degenerate.add(t2)
                     else:
                         moved.add(t2)
-
-                print
-                print 'v1', v1
-                print 'v2', v2
-                print 'v2tris', v2tris
-                print 'v2tri_idx', v2tri_idx
-                print 'moved', self.all_vert_indices[list(moved)]
-                print 'degenerate', self.all_vert_indices[list(degenerate)]
                 
-                print 'moved trinums', moved
+                invalid_contraction = False
+                for moved_tri_idx in moved:
+                    facefrom = self.tri2face[moved_tri_idx]
+                    face_vert2uvidx = self.facegraph.node[facefrom]['vert2uvidx']
+                    
+                    moved_vert_idx = self.all_vert_indices[moved_tri_idx]
+                    other_pts = self.new_uvs[[ face_vert2uvidx[m]
+                                 for m in moved_vert_idx if m != v2 ]]
+                    
+                    #m = (y2-y1)/(x2-x1)
+                    slope = (other_pts[1][1] - other_pts[0][1]) / (other_pts[1][0] - other_pts[0][0])
+                    #y = mx + b
+                    #b = y-mx
+                    yint = other_pts[0][1] - slope * other_pts[0][0]
                 
-                for m in moved:
-                    print m, self.tri2face[m]
+                    #don't want to cross chart boundaries
+                    if v1 not in face_vert2uvidx:
+                        invalid_contraction = True
+                        break
+                    
+                    v2_pt = self.new_uvs[face_vert2uvidx[v2]]
+                    v1_pt = self.new_uvs[face_vert2uvidx[v1]]
+                    v2_atline = slope * v2_pt[0] + yint
+                    v1_atline = slope * v1_pt[0] + yint
+                    
+                    #don't want to flip the triangle in the parametric domain
+                    if v2_atline > 0 and not(v1_atline > 0) or \
+                        v2_atline < 0 and not(v1_atline < 0):
+                        invalid_contraction = True
+                        break
+                    
+                    texture_diff = math.sqrt((v1_pt[0]-v2_pt[0])**2 + (v1_pt[1]-v2_pt[1])**2)
+                    print 'texture diff is', texture_diff
                 
-                import sys
-                sys.exit(0)
+                if invalid_contraction:
+                    continue
+                
+        
+        import sys
+        sys.exit(0)
 
         self.end_operation()
 
@@ -1066,8 +1096,8 @@ class SanderSimplify(object):
         self.calc_edge_length()
         self.straighten_chart_boundaries()
         self.create_initial_parameterizations()
-        #self.optimize_chart_parameterizations()
-        #self.resize_charts()
+        self.optimize_chart_parameterizations()
+        self.resize_charts()
         self.update_corners()
         self.initialize_simplification_errors()
         #self.pack_charts()
