@@ -905,13 +905,15 @@ class SanderSimplify(object):
         self.end_operation()
 
     def resize_charts(self):
-        self.begin_operation('(Step 3 of 7) Resizing and creating charts...')
-        #assert(len(self.mesh.images) == 1)
-        #origtexture = self.mesh.images[0].pilimage
+        self.begin_operation('(Step 3 of 7) Creating and resizing charts...')
+
+        #first create the PIL charts
+        assert(len(self.mesh.images) == 1)
+        origtexture = self.mesh.images[0].pilimage
         TEXTURE_DIMENSION = 1024
         TEXTURE_SIZE = TEXTURE_DIMENSION * TEXTURE_DIMENSION
-        #rp = RectPack(TEXTURE_DIMENSION*2, TEXTURE_DIMENSION*2)
-        #self.chart_ims = {}
+        rp = RectPack(TEXTURE_DIMENSION*2, TEXTURE_DIMENSION*2)
+        self.chart_ims = {}
         for face, facedata in self.facegraph.nodes_iter(data=True):
             relsize = int(math.sqrt((facedata['L2'] / self.total_L2) * TEXTURE_SIZE))
             
@@ -919,38 +921,281 @@ class SanderSimplify(object):
             relsize = int(math.pow(2, round(math.log(relsize, 2))))
             self.facegraph.node[face]['chartsize'] = relsize
             
+            chartim = Image.new('RGB', (relsize, relsize))
+            for tri in facedata['tris']:
+                prevuvs = self.all_orig_uvs[self.all_orig_uv_indices[tri]]
+                newuvs = self.new_uvs[self.new_uv_indices[tri]]
+                prevu = prevuvs[:,0] * origtexture.size[0]
+                prevv = (1.0-prevuvs[:,1]) * origtexture.size[1]
+                newu = (newuvs[:,0] * (relsize-0.5))
+                newv = ((1.0-newuvs[:,1]) * (relsize-0.5))
+                prevtri = [(prevu[0], prevv[0]), (prevu[1], prevv[1]), (prevu[2], prevv[2])]
+                newtri = [(newu[0], newv[0]), (newu[1], newv[1]), (newu[2], newv[2])]
+                transformblit(prevtri, newtri, origtexture, chartim)
+            self.chart_ims[face] = chartim
+            rp.addRectangle(face, relsize, relsize)
+        assert(rp.pack())
+        self.chart_packing = rp
+        
+        #now resize the uvs according to chart size
+        for face, facedata in self.facegraph.nodes_iter(data=True):
+            relsize = self.facegraph.node[face]['chartsize']
             toupdate = self.new_uv_indices[facedata['tris']]
-
-            self.new_uvs[toupdate, 0] = self.new_uvs[toupdate, 0] * (relsize-0.5)
-            self.new_uvs[toupdate, 1] = ((1.0-self.new_uvs[toupdate, 1]) * (relsize-0.5))
-            
-            #chartim = Image.new('RGB', (relsize, relsize))
-            #for tri in facedata['tris']:
-                #prevuvs = self.all_orig_uvs[self.all_orig_uv_indices[tri]]
-                #newuvs = self.new_uvs[self.new_uv_indices[tri]]
-                #prevu = prevuvs[:,0] * origtexture.size[0]
-                #prevv = (1.0-prevuvs[:,1]) * origtexture.size[1]
-                #newu = (newuvs[:,0] * (relsize-0.5))
-                #newv = ((1.0-newuvs[:,1]) * (relsize-0.5))
-                #prevtri = [(prevu[0], prevv[0]), (prevu[1], prevv[1]), (prevu[2], prevv[2])]
-                #newtri = [(newu[0], newv[0]), (newu[1], newv[1]), (newu[2], newv[2])]
-                #transformblit(prevtri, newtri, origtexture, chartim)
-            #self.chart_ims[face] = chartim
-            #rp.addRectangle(face, relsize, relsize)
-        #assert(rp.pack())
-        #self.chart_packing = rp
+            self.new_uvs[toupdate, 0] *= relsize-0.5
+            self.new_uvs[toupdate, 1] *= relsize-0.5
         
         self.end_operation()
 
+    def normalize_uvs(self):
+        self.begin_operation('Normalizing texture coordinates...')
+
+        for face, facedata in self.facegraph.nodes_iter(data=True):
+            relsize = self.facegraph.node[face]['chartsize']
+            
+            toupdate = self.new_uv_indices[facedata['tris']]
+
+            self.new_uvs[toupdate, 0] /= relsize-0.5
+            self.new_uvs[toupdate, 1] /= relsize-0.5
+        
+        self.end_operation()
+
+    def initialize_simplification_errors(self):
+        self.begin_operation('Calculationg priority queue for initial edge contractions...')
+        
+        self.all_corners = set()
+        self.all_edge_verts = set()
+        self.tri2face = {}
+        for face, facedata in self.facegraph.nodes_iter(data=True):
+            self.all_corners = self.all_corners.union(facedata['corners'])
+            self.all_edge_verts = self.all_edge_verts.union(set(chain.from_iterable(facedata['edges'])))
+            for tri in facedata['tris']:
+                self.tri2face[tri] = face
+
+        self.vertexgraph.add_nodes_from(( (i, {'tris':set()}) for i in xrange(len(self.all_vertices))))
+        for i, (v1,v2,v3) in enumerate(self.all_vert_indices):
+            self.vertexgraph.node[v1]['tris'].add(i)
+            self.vertexgraph.node[v2]['tris'].add(i)
+            self.vertexgraph.node[v3]['tris'].add(i)
+
+        self.contraction_priorities = []
+
+        for (vv1, vv2) in self.vertexgraph.edges_iter():
+            for (v1, v2) in ((vv1,vv2),(vv2,vv1)):
+                #considering (v1,v2) -> v1
+                
+                #can't remove corners
+                if v2 in self.all_corners:
+                    continue
+                
+                #need to preserve boundary straightness
+                if v2 in self.all_edge_verts and v1 not in self.all_edge_verts:
+                    continue
+
+                v2tris = list(self.vertexgraph.node[v2]['tris'])
+                v2tri_idx = self.all_vert_indices[v2tris]
+                
+                moved = set()
+                degenerate = set()
+                for t2, t2_idx in izip(v2tris, v2tri_idx):
+                    if v1 in t2_idx:
+                        degenerate.add(t2)
+                    else:
+                        moved.add(t2)
+                
+                invalid_contraction = False
+                total_texture_diff = 0
+                for moved_tri_idx in moved:
+                    facefrom = self.tri2face[moved_tri_idx]
+                    face_vert2uvidx = self.facegraph.node[facefrom]['vert2uvidx']
+                    
+                    moved_vert_idx = self.all_vert_indices[moved_tri_idx]
+                    other_pts = self.new_uvs[[ face_vert2uvidx[m]
+                                 for m in moved_vert_idx if m != v2 ]]
+                    
+                    #m = (y2-y1)/(x2-x1)
+                    slope = (other_pts[1][1] - other_pts[0][1]) / (other_pts[1][0] - other_pts[0][0])
+                    #y = mx + b
+                    #b = y-mx
+                    yint = other_pts[0][1] - slope * other_pts[0][0]
+                
+                    #don't want to cross chart boundaries
+                    if v1 not in face_vert2uvidx:
+                        invalid_contraction = True
+                        break
+                    
+                    v2_pt = self.new_uvs[face_vert2uvidx[v2]]
+                    v1_pt = self.new_uvs[face_vert2uvidx[v1]]
+                    v2_atline = slope * v2_pt[0] + yint
+                    v1_atline = slope * v1_pt[0] + yint
+                    
+                    #don't want to flip the triangle in the parametric domain
+                    if v2_atline > 0 and not(v1_atline > 0) or \
+                        v2_atline < 0 and not(v1_atline < 0):
+                        invalid_contraction = True
+                        break
+                    
+                    texture_diff = math.sqrt((v1_pt[0]-v2_pt[0])**2 + (v1_pt[1]-v2_pt[1])**2)
+                    total_texture_diff += texture_diff
+                
+                if invalid_contraction:
+                    continue
+                
+                self.contraction_priorities.append((total_texture_diff, (v1, v2)))
+                
+
+        heapq.heapify(self.contraction_priorities)
+
+        self.end_operation()
+
+    def simplify_mesh(self):
+        self.begin_operation('(Step 4 of 7) Simplifying...')
+        
+        self.tris_left = set(xrange(len(self.all_vert_indices)))
+        
+        while len(self.contraction_priorities) > 0:
+            (texture_diff, (v1, v2)) = heapq.heappop(self.contraction_priorities)
+            
+            #considering (v1,v2) -> v1
+            
+            #check of one of these vertices was already contracted
+            if v1 not in self.vertexgraph or v2 not in self.vertexgraph:
+                continue
+
+            #print 'texture_diff', texture_diff, 'v1', v1, 'v2', v2, 'numverts', len(self.vertexgraph), 'numfaces', len(self.tris_left), 'contractions left', len(self.contraction_priorities)
+            
+            v2tris = list(self.vertexgraph.node[v2]['tris'])
+            v1tris = self.vertexgraph.node[v1]['tris']
+            v2tri_idx = self.all_vert_indices[v2tris]
+            
+            degenerate = set()
+            new_contractions = set()
+            for t2, t2_idx in izip(v2tris, v2tri_idx):
+                if v1 in t2_idx:
+                    degenerate.add(t2)
+                else:
+                    #these are triangles that have a vertex moving from v2 to v1
+                    where_v2 = numpy.where(t2_idx == v2)[0][0]
+                    where_not_v2 = numpy.where(t2_idx != v2)
+                    other1 = where_not_v2[0][0]
+                    other2 = where_not_v2[0][1]
+                    
+                    #update vert and uv index values from v2 to v1
+                    self.all_vert_indices[t2][where_v2] = v1
+                    facefrom = self.tri2face[t2]
+                    face_vert2uvidx = self.facegraph.node[facefrom]['vert2uvidx']
+                    self.new_uv_indices[t2][where_v2] = face_vert2uvidx[v1]
+                    
+                    #try to find a triangle in the same chart as v2 that contains v1
+                    # so we can copy its normal value
+                    copy_tri_v1 = None
+                    where_v1 = None
+                    for facetri in self.facegraph.node[facefrom]['tris']:
+                        if facetri in v1tris:
+                            facetri_idx = self.all_vert_indices[facetri]
+                            where_v1 = numpy.where(facetri_idx == v1)[0][0]
+                            copy_tri_v1 = facetri
+                            break
+                    if copy_tri_v1 is None:
+                        print v1tris
+                        print self.facegraph.node[facefrom]['tris']
+                    assert(copy_tri_v1 is not None)
+                    self.all_normal_indices[t2][where_v2] = self.all_normal_indices[copy_tri_v1][where_v1]
+                    
+                    #add new candidate merges
+                    new_contractions.add((t2_idx[other1], v1))
+                    new_contractions.add((t2_idx[other2], v1))
+                    new_contractions.add((v1, t2_idx[other1]))
+                    new_contractions.add((v1, t2_idx[other2]))
+                    
+                    #add tri to v1's list now that we moved it
+                    self.vertexgraph.node[v1]['tris'].add(t2)
+            
+            #remove the degenerate triangle from the triangle list of other vertices in the triangle
+            for tri in degenerate:
+                for v in self.all_vert_indices[tri]:
+                    self.vertexgraph.node[v]['tris'].discard(tri)
+            
+            #discard the degenerate triangles from the total list of tris
+            self.tris_left.difference_update(degenerate)
+            
+            #remove vertex from graph
+            self.vertexgraph.remove_node(v2)
+            
+            #now update priority list with new valid contractions
+            for (v1, v2) in new_contractions:
+                #considering (v1,v2) -> v1
+                
+                #can't remove corners
+                if v2 in self.all_corners:
+                    continue
+                
+                #need to preserve boundary straightness
+                if v2 in self.all_edge_verts and v1 not in self.all_edge_verts:
+                    continue
+
+                v2tris = list(self.vertexgraph.node[v2]['tris'])
+                v2tri_idx = self.all_vert_indices[v2tris]
+                
+                moved = set()
+                degenerate = set()
+                for t2, t2_idx in izip(v2tris, v2tri_idx):
+                    if v1 in t2_idx:
+                        degenerate.add(t2)
+                    else:
+                        moved.add(t2)
+                
+                invalid_contraction = False
+                total_texture_diff = 0
+                for moved_tri_idx in moved:
+                    facefrom = self.tri2face[moved_tri_idx]
+                    face_vert2uvidx = self.facegraph.node[facefrom]['vert2uvidx']
+                    
+                    moved_vert_idx = self.all_vert_indices[moved_tri_idx]
+                    other_pts = self.new_uvs[[ face_vert2uvidx[m]
+                                 for m in moved_vert_idx if m != v2 ]]
+                    
+                    #m = (y2-y1)/(x2-x1)
+                    slope = (other_pts[1][1] - other_pts[0][1]) / (other_pts[1][0] - other_pts[0][0])
+                    #y = mx + b
+                    #b = y-mx
+                    yint = other_pts[0][1] - slope * other_pts[0][0]
+                
+                    #don't want to cross chart boundaries
+                    if v1 not in face_vert2uvidx:
+                        invalid_contraction = True
+                        break
+                    
+                    v2_pt = self.new_uvs[face_vert2uvidx[v2]]
+                    v1_pt = self.new_uvs[face_vert2uvidx[v1]]
+                    v2_atline = slope * v2_pt[0] + yint
+                    v1_atline = slope * v1_pt[0] + yint
+                    
+                    #don't want to flip the triangle in the parametric domain
+                    if v2_atline > 0 and not(v1_atline > 0) or \
+                        v2_atline < 0 and not(v1_atline < 0):
+                        invalid_contraction = True
+                        break
+                    
+                    texture_diff = math.sqrt((v1_pt[0]-v2_pt[0])**2 + (v1_pt[1]-v2_pt[1])**2)
+                    total_texture_diff += texture_diff
+                
+                if invalid_contraction:
+                    continue
+                
+                heapq.heappush(self.contraction_priorities, (total_texture_diff, (v1, v2)))
+            
+        self.end_operation()
+
     def pack_charts(self):
-        self.begin_operation('(Step 6 of 7) Packing charts into atlas and mapping texcoords...')
+        self.begin_operation('(Step 6 of 7) Creating and packing charts into atlas...')
         self.atlasimg = Image.new('RGB', (self.chart_packing.width, self.chart_packing.height))
         for face, chartim in self.chart_ims.iteritems():
+            
             x,y,w,h = self.chart_packing.getPlacement(face)
             self.atlasimg.paste(chartim, (x,y,x+w,y+h))
             x,y,w,h,width,height = (float(i) for i in (x,y,w,h,self.chart_packing.width,self.chart_packing.height))
     
-            chart_tris = self.facegraph.node[face]['tris']
+            chart_tris = [f for f in self.facegraph.node[face]['tris'] if f in self.tris_left]
             chart_idx = numpy.unique(self.new_uv_indices[chart_tris])
     
             #this rescales the texcoords to map to the new atlas location
@@ -986,7 +1231,8 @@ class SanderSimplify(object):
         input_list.addInput(1, 'NORMAL', '#sander-normals-array')
         input_list.addInput(2, 'TEXCOORD', '#sander-uv-array')
         
-        new_index = numpy.dstack((self.all_vert_indices, self.all_normal_indices, self.new_uv_indices)).flatten()
+        tris_left = list(self.tris_left)
+        new_index = numpy.dstack((self.all_vert_indices[tris_left], self.all_normal_indices[tris_left], self.new_uv_indices[tris_left])).flatten()
         triset = geom.createTriangleSet(new_index, input_list, "materialref")
         geom.primitives.append(triset)
         newmesh.geometries.append(geom)
@@ -1000,90 +1246,6 @@ class SanderSimplify(object):
         newmesh.scene = myscene
         savezip = meshtool.filters.factory.getInstance('save_collada_zip')
         savezip.apply(newmesh, '/tmp/test.zip')
-        self.end_operation()
-
-    def initialize_simplification_errors(self):
-        self.begin_operation('Calculationg initial edge contraction error values...')
-        
-        self.all_corners = set()
-        self.all_edge_verts = set()
-        self.tri2face = {}
-        for face, facedata in self.facegraph.nodes_iter(data=True):
-            self.all_corners = self.all_corners.union(facedata['corners'])
-            self.all_edge_verts = self.all_edge_verts.union(set(chain.from_iterable(facedata['edges'])))
-            for tri in facedata['tris']:
-                self.tri2face[tri] = face
-
-        self.vertexgraph.add_nodes_from(( (i, {'tris':[]}) for i in xrange(len(self.all_vertices))))
-        for i, (v1,v2,v3) in enumerate(self.all_vert_indices):
-            self.vertexgraph.node[v1]['tris'].append(i)
-            self.vertexgraph.node[v2]['tris'].append(i)
-            self.vertexgraph.node[v3]['tris'].append(i)
-
-        for (vv1, vv2) in self.vertexgraph.edges_iter():
-            for (v1, v2) in ((vv1,vv2),(vv2,vv1)):
-                #considering (v1,v2) -> v1
-                
-                #can't remove corners
-                if v2 in self.all_corners:
-                    continue
-                
-                #need to preserve boundary straightness
-                if v2 in self.all_edge_verts and v1 not in self.all_edge_verts:
-                    continue
-
-                v2tris = self.vertexgraph.node[v2]['tris']
-                v2tri_idx = self.all_vert_indices[v2tris]
-                
-                moved = set()
-                degenerate = set()
-                for t2, t2_idx in izip(v2tris, v2tri_idx):
-                    if v1 in t2_idx:
-                        degenerate.add(t2)
-                    else:
-                        moved.add(t2)
-                
-                invalid_contraction = False
-                for moved_tri_idx in moved:
-                    facefrom = self.tri2face[moved_tri_idx]
-                    face_vert2uvidx = self.facegraph.node[facefrom]['vert2uvidx']
-                    
-                    moved_vert_idx = self.all_vert_indices[moved_tri_idx]
-                    other_pts = self.new_uvs[[ face_vert2uvidx[m]
-                                 for m in moved_vert_idx if m != v2 ]]
-                    
-                    #m = (y2-y1)/(x2-x1)
-                    slope = (other_pts[1][1] - other_pts[0][1]) / (other_pts[1][0] - other_pts[0][0])
-                    #y = mx + b
-                    #b = y-mx
-                    yint = other_pts[0][1] - slope * other_pts[0][0]
-                
-                    #don't want to cross chart boundaries
-                    if v1 not in face_vert2uvidx:
-                        invalid_contraction = True
-                        break
-                    
-                    v2_pt = self.new_uvs[face_vert2uvidx[v2]]
-                    v1_pt = self.new_uvs[face_vert2uvidx[v1]]
-                    v2_atline = slope * v2_pt[0] + yint
-                    v1_atline = slope * v1_pt[0] + yint
-                    
-                    #don't want to flip the triangle in the parametric domain
-                    if v2_atline > 0 and not(v1_atline > 0) or \
-                        v2_atline < 0 and not(v1_atline < 0):
-                        invalid_contraction = True
-                        break
-                    
-                    texture_diff = math.sqrt((v1_pt[0]-v2_pt[0])**2 + (v1_pt[1]-v2_pt[1])**2)
-                    print 'texture diff is', texture_diff
-                
-                if invalid_contraction:
-                    continue
-                
-        
-        import sys
-        sys.exit(0)
-
         self.end_operation()
 
     def simplify(self):
@@ -1100,8 +1262,10 @@ class SanderSimplify(object):
         self.resize_charts()
         self.update_corners()
         self.initialize_simplification_errors()
-        #self.pack_charts()
-        #self.save_mesh()
+        self.simplify_mesh()
+        self.normalize_uvs()
+        self.pack_charts()
+        self.save_mesh()
 
 def FilterGenerator():
     class SandlerSimplificationFilter(OpFilter):
