@@ -16,9 +16,12 @@ import random
 import collada
 import Image
 import ImageDraw
+import ImageFile
 from meshtool.filters.atlas_filters.rectpack import RectPack
 from StringIO import StringIO
 import meshtool.filters
+
+ImageFile.MAXBLOCK = 20*1024*1024 # default is 64k, setting to 20MB to handle large textures
 
 #python 2.5 set
 if not 'set' in __builtin__.__dict__:
@@ -496,13 +499,63 @@ class SanderSimplify(object):
     
         self.end_operation()
 
-    def update_corners(self):
+    def update_corners(self, enforce=False):
         self.begin_operation('Updating corners...')
         for face, facedata in self.facegraph.nodes_iter(data=True):
             edges = facedata['edges']
             vertices = set(chain.from_iterable(edges))
             corners = set((v for v in vertices if len(self.vertexgraph.node[v]) >= 3))
             self.facegraph.node[face]['corners'] = corners
+            
+        if enforce:
+            for (face1, face2) in self.facegraph.edges_iter():
+                edges1 = self.facegraph.node[face1]['edges']
+                edges2 = self.facegraph.node[face2]['edges']
+                shared_edges = edges1.intersection(edges2)
+                shared_vertices = set(chain.from_iterable(shared_edges))
+                corners1 = self.facegraph.node[face1]['corners']
+                corners2 = self.facegraph.node[face2]['corners']
+                combined_corners = corners1.intersection(corners2).intersection(shared_vertices)
+                
+                giveup = False
+                if len(combined_corners) == 1:
+                    pt2edge = {}
+                    for src, dest in shared_edges:
+                        srclist = pt2edge.get(src, [])
+                        srclist.append((src, dest))
+                        pt2edge[src] = srclist
+                        dstlist = pt2edge.get(dest, [])
+                        dstlist.append((src, dest))
+                        pt2edge[dest] = dstlist
+                    start_path = combined_corners.pop()
+                    curpt = start_path
+                    shared_path = []
+                    while curpt in pt2edge:
+                        edge = pt2edge[curpt][0]
+                        sanedge = edge
+                        if edge[0] != curpt:
+                            sanedge = (edge[1], edge[0])
+                        nextpt = sanedge[1]
+                        shared_path.append(sanedge)
+                        nextopts = pt2edge[nextpt]
+                        if edge not in nextopts:
+                            giveup = True
+                            break
+                        nextopts.remove(edge)
+                        if len(nextopts) > 0:
+                            pt2edge[nextpt] = nextopts
+                        else:
+                            del pt2edge[nextpt]
+                        curpt = nextpt
+                    
+                    if giveup:
+                        continue
+                    
+                    end_path = shared_path[-1][1]
+                    
+                    self.facegraph.node[face1]['corners'].add(end_path)
+                    self.facegraph.node[face2]['corners'].add(end_path)
+            
         self.end_operation()
 
     def calc_edge_length(self):
@@ -1085,6 +1138,9 @@ class SanderSimplify(object):
                     face_vert2uvidx = self.facegraph.node[facefrom]['vert2uvidx']
                     self.new_uv_indices[t2][where_v2] = face_vert2uvidx[v1]
                     
+                    #add tri to v1's list now that we moved it
+                    self.vertexgraph.node[v1]['tris'].add(t2)
+                    
                     #try to find a triangle in the same chart as v2 that contains v1
                     # so we can copy its normal value
                     copy_tri_v1 = None
@@ -1095,9 +1151,6 @@ class SanderSimplify(object):
                             where_v1 = numpy.where(facetri_idx == v1)[0][0]
                             copy_tri_v1 = facetri
                             break
-                    if copy_tri_v1 is None:
-                        print v1tris
-                        print self.facegraph.node[facefrom]['tris']
                     assert(copy_tri_v1 is not None)
                     self.all_normal_indices[t2][where_v2] = self.all_normal_indices[copy_tri_v1][where_v1]
                     
@@ -1106,9 +1159,6 @@ class SanderSimplify(object):
                     new_contractions.add((t2_idx[other2], v1))
                     new_contractions.add((v1, t2_idx[other1]))
                     new_contractions.add((v1, t2_idx[other2]))
-                    
-                    #add tri to v1's list now that we moved it
-                    self.vertexgraph.node[v1]['tris'].add(t2)
             
             #remove the degenerate triangle from the triangle list of other vertices in the triangle
             for tri in degenerate:
@@ -1252,15 +1302,23 @@ class SanderSimplify(object):
         self.uniqify_list()
         self.build_vertex_graph()
         self.build_face_graph()
+        
+        print 'number of faces =', len(self.facegraph)
+        print 'connected components =', nx.algorithms.components.connected.number_connected_components(self.vertexgraph)
+        
         self.initialize_chart_merge_errors()
         self.merge_charts()
         self.update_corners()
         self.calc_edge_length()
         self.straighten_chart_boundaries()
+        
+        print 'number of charts =', len(self.facegraph)
+        #renderCharts(self.facegraph, self.all_vertices, self.all_vert_indices)
+        
         self.create_initial_parameterizations()
         self.optimize_chart_parameterizations()
         self.resize_charts()
-        self.update_corners()
+        self.update_corners(enforce=True)
         self.initialize_simplification_errors()
         self.simplify_mesh()
         self.normalize_uvs()
