@@ -109,17 +109,26 @@ def renderCharts(facegraph, verts, vert_indices, lineset=None):
 
     pgeom = Geom(vdata)
     pgeom.addPrimitive(tris)
+
     node = GeomNode("primitive")
     node.addGeom(pgeom)
+
     p3dApp = ShowBase()
     #attachLights(render)
     geomPath = render.attachNewNode(node)
+
     for linenode in linenodes:
         render.attachNewNode(linenode)
     
     #geomPath.setRenderModeWireframe()
     
-    ensureCameraAt(geomPath, base.camera)
+    ensureCameraAt(geomPath, base.cam)
+    
+    boundingSphere = geomPath.getBounds()
+    base.cam.setPos(boundingSphere.getCenter() + boundingSphere.getRadius())
+
+    base.cam.lookAt(boundingSphere.getCenter())
+    
     KeyboardMovement()
     #render.setShaderAuto()
     p3dApp.run()

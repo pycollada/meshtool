@@ -216,9 +216,9 @@ class SanderSimplify(object):
         self.all_normal_indices = []
         self.all_orig_uv_indices = []
         
-        self.vertex_offset = 0
-        self.normal_offset = 0
-        self.origuv_offset = 0
+        self.index_offset = 0
+        
+        self.tri2material = []
         
         self.timer = timer()
         
@@ -227,16 +227,21 @@ class SanderSimplify(object):
             if isinstance(boundgeom, collada.controller.BoundController):
                 boundgeom = boundgeom.geometry
             for boundprim in boundgeom.primitives():
+                
                 self.all_vertices.append(boundprim.vertex)
                 self.all_normals.append(boundprim.normal)
-                self.all_orig_uvs.append(boundprim.texcoordset[0])
-    
-                self.all_vert_indices.append(boundprim.vertex_index + self.vertex_offset)
-                self.vertex_offset += len(boundprim.vertex)
-                self.all_normal_indices.append(boundprim.normal_index + self.normal_offset)
-                self.normal_offset += len(boundprim.normal)
-                self.all_orig_uv_indices.append(boundprim.texcoord_indexset[0] + self.origuv_offset)
-                self.origuv_offset += len(boundprim.texcoordset[0])
+                self.all_vert_indices.append(boundprim.vertex_index + self.index_offset)
+                self.all_normal_indices.append(boundprim.normal_index + self.index_offset)
+                
+                if boundprim.texcoordset and len(boundprim.texcoordset) > 0:
+                    self.all_orig_uvs.append(boundprim.texcoordset[0])
+                    self.all_orig_uv_indices.append(boundprim.texcoord_indexset[0] + self.index_offset)
+                else:
+                    self.all_orig_uv_indices.append(numpy.zeros(shape=(len(boundprim.index), 3)))
+                
+                self.tri2material.append((self.index_offset, boundprim.material))
+
+                self.index_offset += len(boundprim.vertex)
                 
         self.all_vertices = numpy.concatenate(self.all_vertices)
         self.all_normals = numpy.concatenate(self.all_normals)
@@ -244,6 +249,8 @@ class SanderSimplify(object):
         self.all_vert_indices = numpy.concatenate(self.all_vert_indices)
         self.all_normal_indices = numpy.concatenate(self.all_normal_indices)
         self.all_orig_uv_indices = numpy.concatenate(self.all_orig_uv_indices)
+    
+        assert(len(self.all_vert_indices) == len(self.all_normal_indices) == len(self.all_orig_uv_indices))
     
         self.end_operation()
 
@@ -370,8 +377,14 @@ class SanderSimplify(object):
             edges1 = self.facegraph.node[face1]['edges']
             edges2 = self.facegraph.node[face2]['edges']
             combined_edges = edges1.symmetric_difference(edges2)
+            shared_edges = edges1.intersection(edges2)
+            
+            #if the length of the xor of the edges of the two faces is less than either of the original
+            # then it's creating some kind of collapse, so disallow
+            if len(combined_edges) < len(edges1) or len(combined_edges) < len(edges2):
+                continue
     
-            if len(self.invalid_edges) > 0 and len(combined_edges.intersection(self.invalid_edges)) > 0:
+            if len(self.invalid_edges) > 0 and len(shared_edges.intersection(self.invalid_edges)) > 0:
                 continue
     
             #check if boundary is more than one connected component
@@ -418,7 +431,7 @@ class SanderSimplify(object):
             
             #cutoff value was chosen which seems to work well for most models
             logrel = math.log(1 + error) / math.log(1 + self.maxerror)
-            if logrel > 0.92:
+            if logrel > 0.90:
                 break
             #print 'error', error, 'maxerror', maxerror, 'logrel', logrel, 'merged left', len(merge_priorities), 'numfaces', len(facegraph)
             
@@ -1303,16 +1316,20 @@ class SanderSimplify(object):
         self.build_vertex_graph()
         self.build_face_graph()
         
+        #renderCharts(self.facegraph, self.all_vertices, self.all_vert_indices)
         print 'number of faces =', len(self.facegraph)
         print 'connected components =', nx.algorithms.components.connected.number_connected_components(self.vertexgraph)
         
         self.initialize_chart_merge_errors()
         self.merge_charts()
+        
+        print 'number of charts =', len(self.facegraph)
+        #renderCharts(self.facegraph, self.all_vertices, self.all_vert_indices)
+        
         self.update_corners()
         self.calc_edge_length()
         self.straighten_chart_boundaries()
         
-        print 'number of charts =', len(self.facegraph)
         #renderCharts(self.facegraph, self.all_vertices, self.all_vert_indices)
         
         self.create_initial_parameterizations()
