@@ -336,47 +336,31 @@ class SanderSimplify(object):
             adj_both = adj_v1.intersection(adj_v2)
             if len(adj_both) < 2:
                 continue
-            if len(adj_both) == 4:
-                #check for overlapping identical triangles
-                if len(adj_both) == 4:
-                    sorted_tris = set()
-                    for f in adj_both:
-                        sorted_tris.add(tuple(sorted(self.all_vert_indices[f])))
-                    if len(sorted_tris) == 2:
-                        #okay, we have two sets of overlapping triangles
-                        # we need to determine which two in each set are facing the same way
-                        set1, set2 = sorted_tris
-                        set1_forward = None
-                        set1_backward = None
-                        set2_forward = None
-                        set2_backward = None
-                        for f in adj_both:
-                            tri = self.all_vert_indices[f]
-                            wherev1 = numpy.where(tri == v1)[0][0]
-                            nextloc = wherev1 + 1 if wherev1 < 2 else 0
-                            prevloc = wherev1 - 1 if wherev1 > 0 else 2
-                            if tri[nextloc] == v2:
-                                if tuple(sorted(tri)) == set1:
-                                    set1_forward = f
-                                elif tuple(sorted(tri)) == set2:
-                                    set2_forward = f
-                                else:
-                                    assert(False)
-                            elif tri[prevloc] == v2:
-                                if tuple(sorted(tri)) == set1:
-                                    set1_backward = f
-                                elif tuple(sorted(tri)) == set2:
-                                    set2_backward = f
-                                else:
-                                    assert(False)
-                            else:
-                                assert(False)
-                        facegraph.add_edge(set1_forward, set2_backward)
-                        facegraph.add_edge(set1_backward, set2_forward)
-                        continue
+            numadded = 0
             for (f1, f2) in combinations(adj_both, 2):
-                facegraph.add_edge(f1, f2)
-            if len(adj_both) > 2:
+                f1tri = self.all_vert_indices[f1]
+                f2tri = self.all_vert_indices[f2]
+
+                #if faces are the same up to winding order, they shouldnt be considered connected
+                if sorted(f1tri) == sorted(f2tri):
+                    continue
+                edges = [(f1tri[0], f1tri[1]), (f1tri[1], f1tri[2]), (f1tri[2], f1tri[0])]
+
+                #check to see if the adjacent triangles traverse a shared edge in the same order
+                # if they do, then they are facing opposite directions and so should not be merged
+                reallyConnected = True
+                for (f1v1, f1v2) in edges:
+                    if not f1v1 in f2tri or not f1v2 in f2tri:
+                        continue
+                    wheref2v1 = numpy.where(f2tri == f1v1)[0][0]
+                    nextlocf2 = wheref2v1 + 1 if wheref2v1 < 2 else 0
+                    if f2tri[nextlocf2] == f1v2:
+                        reallyConnected = False
+                
+                if reallyConnected:
+                    numadded += 1
+                    facegraph.add_edge(f1, f2)
+            if numadded > 2:
                 #edge is adjacent to more than two faces, so don't merge it
                 self.invalid_edges.add(tuple(sorted([v1, v2])))
                 
@@ -431,6 +415,9 @@ class SanderSimplify(object):
             if nx.algorithms.components.connected.number_connected_components(connected_components_graph) > 1:
                 if len(edges1) == 3 and len(edges2) == 3: print 'rejecting cc1'
                 continue
+            if len(nx.algorithms.cycles.cycle_basis(connected_components_graph)) != 1:
+                print 'invalid merge because of too many cycles'
+                continue
     
             # if the number of corners of the merged face is less than 3, disqualify it
             # where a "corner" is defined as a vertex with at least 3 adjacent faces
@@ -439,14 +426,16 @@ class SanderSimplify(object):
             vertices1 = set(chain.from_iterable(edges1))
             for v in vertices1:
                 adj_v = set(self.vertexgraph.node[v].keys())
-                if len(adj_v) >= 3:
+                numadj = self.facegraph.subgraph(adj_v).number_of_edges()
+                if numadj >= 3:
                     corners1.add(v)
             
             corners2 = set()
             vertices2 = set(chain.from_iterable(edges2))
             for v in vertices2:
                 adj_v = set(self.vertexgraph.node[v].keys())
-                if len(adj_v) >= 3:
+                numadj = self.facegraph.subgraph(adj_v).number_of_edges()
+                if numadj >= 3:
                     corners2.add(v)
             
             combined_vertices = set(chain.from_iterable(combined_edges))
@@ -455,12 +444,10 @@ class SanderSimplify(object):
             for v in combined_vertices:
                 adj_v = set(self.vertexgraph.node[v].keys())
                 faces_sharing_vert.update(adj_v)
-                if face1 in adj_v or face2 in adj_v:
-                    #standin for new face
-                    adj_v.add(-1)
-                adj_v.discard(face1)
-                adj_v.discard(face2)
-                if len(adj_v) >= 3:
+                numadj = self.facegraph.subgraph(adj_v).number_of_edges()
+                if face1 in adj_v and face2 in adj_v:
+                    numadj -= 1
+                if numadj >= 3:
                     newcorners.add(v)
             faces_sharing_vert.discard(face1)
             faces_sharing_vert.discard(face2)
@@ -505,13 +492,12 @@ class SanderSimplify(object):
                 otherprevcorners = set()
                 for v in vertices:
                     adj_v = set(self.vertexgraph.node[v].keys())
-                    if len(adj_v) >= 3:
+                    numadj = self.facegraph.subgraph(adj_v).number_of_edges()
+                    if numadj >= 3:
                         otherprevcorners.add(v)
-                    if face1 in adj_v or face2 in adj_v:
-                        adj_v.add(newface)
-                    adj_v.discard(face1)
-                    adj_v.discard(face2)
-                    if len(adj_v) >= 3:
+                    if face1 in adj_v and face2 in adj_v:
+                        numadj -= 1
+                    if numadj >= 3:
                         othernewcorners.add(v)
                 
                 #invalid merge if neighbor would have less than 3 corners
@@ -523,7 +509,12 @@ class SanderSimplify(object):
     
             if invalidmerge:
                 continue
-    
+            
+            #only add edges to neighbors that are already neighbors
+            valid_neighbors = set(self.facegraph.neighbors(face1))
+            valid_neighbors.update(set(self.facegraph.neighbors(face2)))
+            edges_to_add = [e for e in edges_to_add if (e[1] in valid_neighbors)]
+            
             combined_tris = self.facegraph.node[face1]['tris'] + self.facegraph.node[face2]['tris']
             self.facegraph.add_node(newface, tris=combined_tris, edges=combined_edges)        
             self.facegraph.add_edges_from(edges_to_add)
@@ -558,7 +549,7 @@ class SanderSimplify(object):
         for face, facedata in self.facegraph.nodes_iter(data=True):
             edges = facedata['edges']
             vertices = set(chain.from_iterable(edges))
-            corners = set((v for v in vertices if len(self.vertexgraph.node[v]) >= 3))
+            corners = set((v for v in vertices if self.facegraph.subgraph(self.vertexgraph.node[v].keys()).number_of_edges() >= 3))
             self.facegraph.node[face]['corners'] = corners
             
         if enforce:
@@ -566,6 +557,10 @@ class SanderSimplify(object):
                 edges1 = self.facegraph.node[face1]['edges']
                 edges2 = self.facegraph.node[face2]['edges']
                 shared_edges = edges1.intersection(edges2)
+                
+                if len(self.invalid_edges) > 0 and len(shared_edges.intersection(self.invalid_edges)) > 0:
+                    continue
+                
                 shared_vertices = set(chain.from_iterable(shared_edges))
                 corners1 = self.facegraph.node[face1]['corners']
                 corners2 = self.facegraph.node[face2]['corners']
@@ -632,6 +627,9 @@ class SanderSimplify(object):
             edges2 = self.facegraph.node[face2]['edges']
             shared_edges = edges1.intersection(edges2)
             
+            if len(self.invalid_edges) > 0 and len(shared_edges.intersection(self.invalid_edges)) > 0:
+                continue
+            
             #dont bother trying to straighten a single edge
             if len(shared_edges) == 1:
                 continue
@@ -643,6 +641,19 @@ class SanderSimplify(object):
             
             if len(combined_corners) < 1 or len(combined_corners) > 2:
                 print 'warn combined corners wrong', len(combined_corners)
+                #print 'shared edges', shared_edges
+                #fakegraph = nx.Graph()
+                #fakegraph.add_node(-1, tris=tris1)
+                #fakegraph.add_node(-2, tris=tris2)
+                #cur = 0
+                #for f in self.facegraph.neighbors(face1):
+                #    fakegraph.add_node(cur, tris=self.facegraph.node[f]['tris'])
+                #    cur += 1
+                #for f in self.facegraph.neighbors(face2):
+                #    fakegraph.add_node(cur, tris=self.facegraph.node[f]['tris'])
+                #    cur += 1
+                #renderCharts(fakegraph, self.all_vertices, self.all_vert_indices, lineset=[shared_edges])
+                
                 continue
             
             giveup = False
@@ -1371,7 +1382,7 @@ class SanderSimplify(object):
         self.calc_edge_length()
         self.straighten_chart_boundaries()
         
-        renderCharts(self.facegraph, self.all_vertices, self.all_vert_indices)
+        #renderCharts(self.facegraph, self.all_vertices, self.all_vert_indices)
         
         self.create_initial_parameterizations()
         self.optimize_chart_parameterizations()
