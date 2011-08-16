@@ -336,9 +336,48 @@ class SanderSimplify(object):
             adj_both = adj_v1.intersection(adj_v2)
             if len(adj_both) < 2:
                 continue
+            if len(adj_both) == 4:
+                #check for overlapping identical triangles
+                if len(adj_both) == 4:
+                    sorted_tris = set()
+                    for f in adj_both:
+                        sorted_tris.add(tuple(sorted(self.all_vert_indices[f])))
+                    if len(sorted_tris) == 2:
+                        #okay, we have two sets of overlapping triangles
+                        # we need to determine which two in each set are facing the same way
+                        set1, set2 = sorted_tris
+                        set1_forward = None
+                        set1_backward = None
+                        set2_forward = None
+                        set2_backward = None
+                        for f in adj_both:
+                            tri = self.all_vert_indices[f]
+                            wherev1 = numpy.where(tri == v1)[0][0]
+                            nextloc = wherev1 + 1 if wherev1 < 2 else 0
+                            prevloc = wherev1 - 1 if wherev1 > 0 else 2
+                            if tri[nextloc] == v2:
+                                if tuple(sorted(tri)) == set1:
+                                    set1_forward = f
+                                elif tuple(sorted(tri)) == set2:
+                                    set2_forward = f
+                                else:
+                                    assert(False)
+                            elif tri[prevloc] == v2:
+                                if tuple(sorted(tri)) == set1:
+                                    set1_backward = f
+                                elif tuple(sorted(tri)) == set2:
+                                    set2_backward = f
+                                else:
+                                    assert(False)
+                            else:
+                                assert(False)
+                        facegraph.add_edge(set1_forward, set2_backward)
+                        facegraph.add_edge(set1_backward, set2_forward)
+                        continue
             for (f1, f2) in combinations(adj_both, 2):
                 facegraph.add_edge(f1, f2)
             if len(adj_both) > 2:
+                #edge is adjacent to more than two faces, so don't merge it
                 self.invalid_edges.add(tuple(sorted([v1, v2])))
                 
         self.facegraph = facegraph
@@ -442,6 +481,8 @@ class SanderSimplify(object):
             
             invalidmerge = False
             for otherface in faces_sharing_vert:
+                if otherface not in self.facegraph:
+                    continue
                 otheredges = self.facegraph.node[otherface]['edges']
                 otherverts = set(chain.from_iterable(otheredges))
                 commonverts = combined_vertices.intersection(otherverts)
@@ -1330,7 +1371,7 @@ class SanderSimplify(object):
         self.calc_edge_length()
         self.straighten_chart_boundaries()
         
-        #renderCharts(self.facegraph, self.all_vertices, self.all_vert_indices)
+        renderCharts(self.facegraph, self.all_vertices, self.all_vert_indices)
         
         self.create_initial_parameterizations()
         self.optimize_chart_parameterizations()
