@@ -3,7 +3,7 @@ from meshtool.filters.base_filters import *
 import inspect
 import numpy
 import networkx as nx
-from itertools import chain, combinations, izip
+from itertools import chain, izip
 import datetime
 import math
 import __builtin__
@@ -32,6 +32,47 @@ if not 'set' in __builtin__.__dict__:
 args, varargs, keywords, defaults = inspect.getargspec(numpy.unique)
 if 'return_inverse' not in args:
     numpy.unique = numpy.unique1d
+
+#next for py 2.5
+try: next
+except NameError:
+    def next ( obj ): return obj.next()
+
+#chain.from_iterable is not in 2.5
+try: chain.from_iterable
+except AttributeError:
+    _chain = chain
+    class ChainWrapper(chain):
+        def __call__(self, *args, **kwargs):
+            return _chain(*args, **kwargs)
+        @classmethod
+        def from_iterable(self, iterables):
+            for it in iterables:
+                for element in it:
+                    yield element
+    chain = ChainWrapper()
+
+#itertools.combinations is not in python 2.5
+try:
+    from itertools import combinations
+except ImportError:
+    def combinations(iterable, r):
+        pool = tuple(iterable)
+        n = len(pool)
+        if r > n:
+            return
+        indices = range(r)
+        yield tuple(pool[i] for i in indices)
+        while True:
+            for i in reversed(range(r)):
+                if indices[i] != i + n - r:
+                    break
+            else:
+                return
+            indices[i] += 1
+            for j in range(i+1, r):
+                indices[j] = indices[j-1] + 1
+            yield tuple(pool[i] for i in indices)
 
 def timer():
     begintime = datetime.datetime.now()
@@ -699,7 +740,7 @@ class SanderSimplify(object):
             all_verts1 = set(chain.from_iterable(self.all_vert_indices[tris1]))
             all_verts2 = set(chain.from_iterable(self.all_vert_indices[tris2]))
             stop_nodes = all_verts1.intersection(all_verts2).difference(shared_vertices)
-            stop_nodes = stop_nodes.union(set(chain.from_iterable(edges1)), set(chain.from_iterable(edges2)))
+            stop_nodes = stop_nodes.union(set(chain.from_iterable(edges1))).union(set(chain.from_iterable(edges2)))
             constrained_set = all_verts1.union(all_verts2)
             
             try:
@@ -891,7 +932,10 @@ class SanderSimplify(object):
                 A /= sumu
                 Bu /= sumu
                 Bv /= sumu
-                numpy.fill_diagonal(A, 1)
+                try: numpy.fill_diagonal(A, 1)
+                except AttributeError:
+                    for i in xrange(len(A)):
+                        A[i][i] = 1
                 
                 interior_us = numpy.linalg.solve(A, Bu)
                 interior_vs = numpy.linalg.solve(A, Bv)

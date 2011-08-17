@@ -8,6 +8,11 @@ if not 'set' in __builtin__.__dict__:
     import sets
     set = sets.Set
 
+#next for py 2.5
+try: next
+except NameError:
+    def next ( obj ): return obj.next()
+
 def astar_path(G, source, target, heuristic=None, weight='weight', exclude=None, subset=None):
     """Return a list of nodes in a shortest path between source and target 
     using the A* ("A-star") algorithm.
