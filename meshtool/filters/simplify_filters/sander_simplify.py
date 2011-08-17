@@ -20,6 +20,7 @@ import ImageFile
 from meshtool.filters.atlas_filters.rectpack import RectPack
 from StringIO import StringIO
 import meshtool.filters
+import bisect
 
 ImageFile.MAXBLOCK = 20*1024*1024 # default is 64k, setting to 20MB to handle large textures
 
@@ -244,6 +245,38 @@ def transformblit(src_tri, dst_tri, src_img, dst_img):
 
     dst_img.paste(transformed, (minx, miny), mask=mask)
 
+def quadricsForTriangles(tris):
+    """Computes the quadric error matrix Q = (A,b,c)
+    for each triangle. Also returns the area and normal
+    for each triangle"""
+    normal = numpy.cross( tris[::,1] - tris[::,0], tris[::,2] - tris[::,0] )
+    collada.util.normalize_v3(normal)
+    
+    s1 = tris[::,1] - tris[::,0]
+    s1 = array_dot(s1, s1)
+    s2 = tris[::,2] - tris[::,0]
+    s2 = array_dot(s2, s2)
+    s3 = tris[::,2] - tris[::,1]
+    s3 = array_dot(s3, s3)
+    
+    sp = (s1 + s2 + s3) / 2.0
+    area = sp*(sp-s1)*(sp-s2)*(sp-s3)
+    area_zeros = numpy.zeros(area.shape, area.dtype)
+    area = numpy.where(area < 0, area_zeros, numpy.sqrt(area))
+    area_zeros = None
+    
+    d = -array_mult(normal, tris[:,0])
+
+    b = normal * (area*d)[:,numpy.newaxis]
+    c = area*d*d
+    
+    A = numpy.dstack((normal[:,0][:,numpy.newaxis] * normal,
+                       normal[:,1][:,numpy.newaxis] * normal,
+                       normal[:,2][:,numpy.newaxis] * normal))
+    A = area[:,numpy.newaxis,numpy.newaxis] * A
+    
+    return (A, b, c, area, normal)
+
 class SanderSimplify(object):
 
     def __init__(self, mesh):
@@ -258,6 +291,9 @@ class SanderSimplify(object):
         self.all_orig_uv_indices = []
         
         self.index_offset = 0
+        self.vertex_offset = 0
+        self.normal_offset = 0
+        self.uv_offset = 0
         
         self.tri2material = []
         
@@ -268,31 +304,33 @@ class SanderSimplify(object):
             if isinstance(boundgeom, collada.controller.BoundController):
                 boundgeom = boundgeom.geometry
             for boundprim in boundgeom.primitives():
-                
+
                 self.all_vertices.append(boundprim.vertex)
                 self.all_normals.append(boundprim.normal)
-                self.all_vert_indices.append(boundprim.vertex_index + self.index_offset)
-                self.all_normal_indices.append(boundprim.normal_index + self.index_offset)
+                self.all_vert_indices.append(boundprim.vertex_index + self.vertex_offset)
+                self.all_normal_indices.append(boundprim.normal_index + self.normal_offset)
+                self.vertex_offset += len(boundprim.vertex)
+                self.normal_offset += len(boundprim.normal)
                 
                 if boundprim.texcoordset and len(boundprim.texcoordset) > 0:
                     self.all_orig_uvs.append(boundprim.texcoordset[0])
-                    self.all_orig_uv_indices.append(boundprim.texcoord_indexset[0] + self.index_offset)
+                    self.all_orig_uv_indices.append(boundprim.texcoord_indexset[0] + self.uv_offset)
+                    self.uv_offset += len(boundprim.texcoordset[0])
                 else:
                     self.all_orig_uv_indices.append(numpy.zeros(shape=(len(boundprim.index), 3)))
                 
                 self.tri2material.append((self.index_offset, boundprim.material))
-
-                self.index_offset += len(boundprim.vertex)
+                self.index_offset += len(boundprim.index)
                 
         self.all_vertices = numpy.concatenate(self.all_vertices)
         self.all_normals = numpy.concatenate(self.all_normals)
-        self.all_orig_uvs = numpy.concatenate(self.all_orig_uvs)
+        self.all_orig_uvs = numpy.concatenate(self.all_orig_uvs) if len(self.all_orig_uvs) > 0 else numpy.array([], dtype=numpy.float32)
         self.all_vert_indices = numpy.concatenate(self.all_vert_indices)
         self.all_normal_indices = numpy.concatenate(self.all_normal_indices)
-        self.all_orig_uv_indices = numpy.concatenate(self.all_orig_uv_indices)
+        self.all_orig_uv_indices = numpy.concatenate(self.all_orig_uv_indices) if len(self.all_orig_uv_indices) > 0 else numpy.array([], dtype=numpy.int32)
     
         assert(len(self.all_vert_indices) == len(self.all_normal_indices) == len(self.all_orig_uv_indices))
-    
+            
         self.end_operation()
 
     def begin_operation(self, message):
@@ -682,19 +720,10 @@ class SanderSimplify(object):
             
             if len(combined_corners) < 1 or len(combined_corners) > 2:
                 print 'warn combined corners wrong', len(combined_corners)
-                #print 'shared edges', shared_edges
-                #fakegraph = nx.Graph()
-                #fakegraph.add_node(-1, tris=tris1)
-                #fakegraph.add_node(-2, tris=tris2)
-                #cur = 0
-                #for f in self.facegraph.neighbors(face1):
-                #    fakegraph.add_node(cur, tris=self.facegraph.node[f]['tris'])
-                #    cur += 1
-                #for f in self.facegraph.neighbors(face2):
-                #    fakegraph.add_node(cur, tris=self.facegraph.node[f]['tris'])
-                #    cur += 1
-                #renderCharts(fakegraph, self.all_vertices, self.all_vert_indices, lineset=[shared_edges])
-                
+                fakegraph = nx.Graph()
+                fakegraph.add_node(-2, tris=tris1)
+                fakegraph.add_node(-1, tris=tris2)
+                renderCharts(fakegraph, self.all_vertices, self.all_vert_indices, lineset=[shared_edges])
                 continue
             
             giveup = False
@@ -840,6 +869,15 @@ class SanderSimplify(object):
                 if len(face2otheredges) == 0:
                     print 'warn otherone subsumed'
                 
+            #check if boundary is more than one connected component
+            connected_components_graph = nx.from_edgelist(new_combined_edges)
+            if nx.algorithms.components.connected.number_connected_components(connected_components_graph) > 1:
+                'rejecting cc4'
+                continue
+            if len(nx.algorithms.cycles.cycle_basis(connected_components_graph)) > 1:
+                print 'invalid straighten because of too many cycles'
+                continue
+                
             #update adjaceny in vertex graph for swapped
             orig_verts1 = set(chain.from_iterable(self.facegraph.node[face1]['edges']))
             orig_verts2 = set(chain.from_iterable(self.facegraph.node[face2]['edges']))
@@ -970,7 +1008,7 @@ class SanderSimplify(object):
             index_map.shape = chart_tris.shape
             border_verts = set(chain.from_iterable(border_edges))
             
-            for iteration in range(1, 11):
+            for iteration in range(1, 5):
             
                 L2 = stretch_metric(tri_3d, tri_2d)
                 neighborhood_stretch = numpy.zeros(unique_verts.shape, dtype=numpy.float32)
@@ -1069,9 +1107,14 @@ class SanderSimplify(object):
     def resize_charts(self):
         self.begin_operation('(Step 3 of 7) Creating and resizing charts...')
 
-        #first create the PIL charts
-        assert(len(self.mesh.images) == 1)
-        origtexture = self.mesh.images[0].pilimage
+        self.material2color = {}
+        for i, mat in self.tri2material:
+            if mat not in self.material2color:
+                if isinstance(mat.effect.diffuse, tuple):
+                    self.material2color[mat] = mat.effect.diffuse
+                else:
+                    self.material2color[mat] = mat.effect.diffuse.sampler.surface.image.pilimage
+
         TEXTURE_DIMENSION = 1024
         TEXTURE_SIZE = TEXTURE_DIMENSION * TEXTURE_DIMENSION
         rp = RectPack(TEXTURE_DIMENSION*2, TEXTURE_DIMENSION*2)
@@ -1084,17 +1127,26 @@ class SanderSimplify(object):
             self.facegraph.node[face]['chartsize'] = relsize
             
             chartim = Image.new('RGB', (relsize, relsize))
+            chartdraw = ImageDraw.Draw(chartim)
             for tri in facedata['tris']:
-                prevuvs = self.all_orig_uvs[self.all_orig_uv_indices[tri]]
+                
                 newuvs = self.new_uvs[self.new_uv_indices[tri]]
-                prevu = prevuvs[:,0] * origtexture.size[0]
-                prevv = (1.0-prevuvs[:,1]) * origtexture.size[1]
                 newu = (newuvs[:,0] * (relsize-0.5))
                 newv = ((1.0-newuvs[:,1]) * (relsize-0.5))
-                prevtri = [(prevu[0], prevv[0]), (prevu[1], prevv[1]), (prevu[2], prevv[2])]
                 newtri = [(newu[0], newv[0]), (newu[1], newv[1]), (newu[2], newv[2])]
-                transformblit(prevtri, newtri, origtexture, chartim)
+                
+                diffuse_source = self.material2color[self.tri2material[bisect.bisect(self.tri2material, (tri,0)) - 1][1]]
+                if isinstance(diffuse_source, tuple):
+                    color = (int(diffuse_source[0]*255), int(diffuse_source[1]*255), int(diffuse_source[2]*255))
+                    chartdraw.polygon(newtri, fill=color, outline=color)
+                else:
+                    prevuvs = self.all_orig_uvs[self.all_orig_uv_indices[tri]]
+                    prevu = prevuvs[:,0] * diffuse_source.size[0]
+                    prevv = (1.0-prevuvs[:,1]) * diffuse_source.size[1]
+                    prevtri = [(prevu[0], prevv[0]), (prevu[1], prevv[1]), (prevu[2], prevv[2])]
+                    transformblit(prevtri, newtri, diffuse_source, chartim)
             self.chart_ims[face] = chartim
+
             rp.addRectangle(face, relsize, relsize)
         assert(rp.pack())
         self.chart_packing = rp
@@ -1140,6 +1192,18 @@ class SanderSimplify(object):
             self.vertexgraph.node[v3]['tris'].add(i)
 
         self.contraction_priorities = []
+
+        (A, b, c, area, normal) = quadricsForTriangles(self.all_vertices[self.all_vert_indices])
+        print 'A2', A
+        print 'b2', b
+        print 'c2', c
+        print 'area', area
+        print 'normal', normal
+        
+        self.vert_quadric_A = numpy.zeros(shape=(len(self.all_vertices), 3, 3))
+        self.vert_quadric_b = numpy.zeros(shape=(len(self.all_vertices), 3, 1))
+        
+        raw_input()
 
         for (vv1, vv2) in self.vertexgraph.edges_iter():
             for (v1, v2) in ((vv1,vv2),(vv2,vv1)):
@@ -1423,17 +1487,21 @@ class SanderSimplify(object):
         #renderCharts(self.facegraph, self.all_vertices, self.all_vert_indices)
         
         self.update_corners()
+        
         self.calc_edge_length()
         self.straighten_chart_boundaries()
+        self.update_corners(enforce=True)
         
         #renderCharts(self.facegraph, self.all_vertices, self.all_vert_indices)
         
         self.create_initial_parameterizations()
         self.optimize_chart_parameterizations()
         self.resize_charts()
-        self.update_corners(enforce=True)
+        
         self.initialize_simplification_errors()
         self.simplify_mesh()
+        print 'number of faces in base mesh =', len(self.tris_left)
+        
         self.normalize_uvs()
         self.pack_charts()
         self.save_mesh()

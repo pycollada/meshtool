@@ -118,7 +118,7 @@ def renderCharts(facegraph, verts, vert_indices, lineset=None):
     geomPath = render.attachNewNode(node)
 
     for linenode in linenodes:
-        render.attachNewNode(linenode)
+        geomPath.attachNewNode(linenode)
     
     #geomPath.setRenderModeWireframe()
     
@@ -130,5 +130,7 @@ def renderCharts(facegraph, verts, vert_indices, lineset=None):
     base.cam.lookAt(boundingSphere.getCenter())
     
     KeyboardMovement()
+    MouseDrag(geomPath)
+    MouseScaleZoom(geomPath)
     #render.setShaderAuto()
     p3dApp.run()
