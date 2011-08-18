@@ -75,6 +75,10 @@ except ImportError:
                 indices[j] = indices[j-1] + 1
             yield tuple(pool[i] for i in indices)
 
+#Error threshold values, range 0-1
+MERGE_ERROR_THRESHOLD = 0.88
+SIMPLIFICATION_ERROR_THRESHOLD = 0.50
+
 def timer():
     begintime = datetime.datetime.now()
     while True:
@@ -180,9 +184,13 @@ def stretch_metric(t3d, t2d, return_A2d=False, flippedCheck=None, normalize=Fals
         L2[A2d == 0] = numpy.inf
     if normalize:
         A3d = tri_areas_3d(t3d)
+        copyL2 = L2
+        A2d[A2d == numpy.inf] = 0
         L2 = numpy.sqrt(numpy.sum(L2*L2*A3d) / numpy.sum(A3d)) * numpy.sqrt(numpy.sum(numpy.abs(A2d)) / numpy.sum(A3d))
+        
     if return_A2d:
         return L2, A2d
+    
     return L2
 
 def drawChart(chart_tris, border_verts, new_uvs, newvert2idx):
@@ -245,6 +253,10 @@ def transformblit(src_tri, dst_tri, src_img, dst_img):
 
     dst_img.paste(transformed, (minx, miny), mask=mask)
 
+def evalQuadric(A, b, c, pt):
+    """Evaluates a quadric Q = (A,b,c) at the point pt"""
+    return numpy.dot(pt,numpy.inner(A,pt)) + 2*numpy.dot(b,pt) + c
+
 def quadricsForTriangles(tris):
     """Computes the quadric error matrix Q = (A,b,c)
     for each triangle. Also returns the area and normal
@@ -261,9 +273,15 @@ def quadricsForTriangles(tris):
     
     sp = (s1 + s2 + s3) / 2.0
     area = sp*(sp-s1)*(sp-s2)*(sp-s3)
+    
     area_zeros = numpy.zeros(area.shape, area.dtype)
     area = numpy.where(area < 0, area_zeros, numpy.sqrt(area))
     area_zeros = None
+    
+    #area = numpy.sqrt(numpy.abs(area))
+    
+    #print 'area', area
+    #print 
     
     d = -array_mult(normal, tris[:,0])
 
@@ -536,7 +554,7 @@ class SanderSimplify(object):
             
             #cutoff value was chosen which seems to work well for most models
             logrel = math.log(1 + error) / math.log(1 + self.maxerror)
-            if logrel > 0.90:
+            if logrel > MERGE_ERROR_THRESHOLD:
                 break
             #print 'error', error, 'maxerror', maxerror, 'logrel', logrel, 'merged left', len(merge_priorities), 'numfaces', len(facegraph)
             
@@ -588,6 +606,11 @@ class SanderSimplify(object):
     
             if invalidmerge:
                 continue
+            
+            bordergraph = nx.from_edgelist(combined_edges)
+            if len(list(super_cycle(bordergraph))) < 1:
+                print 'bad merge!!'
+                raw_input()
             
             #only add edges to neighbors that are already neighbors
             valid_neighbors = set(self.facegraph.neighbors(face1))
@@ -720,10 +743,10 @@ class SanderSimplify(object):
             
             if len(combined_corners) < 1 or len(combined_corners) > 2:
                 print 'warn combined corners wrong', len(combined_corners)
-                fakegraph = nx.Graph()
-                fakegraph.add_node(-2, tris=tris1)
-                fakegraph.add_node(-1, tris=tris2)
-                renderCharts(fakegraph, self.all_vertices, self.all_vert_indices, lineset=[shared_edges])
+                #fakegraph = nx.Graph()
+                #fakegraph.add_node(-2, tris=tris1)
+                #fakegraph.add_node(-1, tris=tris2)
+                #renderCharts(fakegraph, self.all_vertices, self.all_vert_indices, lineset=[shared_edges])
                 continue
             
             giveup = False
@@ -852,6 +875,15 @@ class SanderSimplify(object):
     
             new_edges1 = new_edges1.union(new_combined_edges)
             new_edges2 = new_edges2.union(new_combined_edges)
+    
+            bordergraph1 = nx.from_edgelist(new_edges1)
+            if len(list(super_cycle(bordergraph1))) < 1:
+                print 'bad straighten1!!'
+                raw_input()
+            bordergraph2 = nx.from_edgelist(new_edges2)
+            if len(list(super_cycle(bordergraph2))) < 1:
+                print 'bad straighten2!!'
+                raw_input()
     
             #if we stole edges from one face to the other, fix it
             for otherface in self.facegraph.neighbors_iter(face1):
@@ -1044,11 +1076,13 @@ class SanderSimplify(object):
                         return ((y - vcoord) / randslope) + ucoord
                     
                     xintercept0 = yfromx(0)
-                    minx = 0.0 if 0 < xintercept0 < 1 else min(xfromy(0), xfromy(1))
+                    minx = 0.0 if 0 <= xintercept0 <= 1 else min(xfromy(0), xfromy(1))
                     xintercept1 = yfromx(1)
-                    maxx = 1.0 if 0 < xintercept1 < 1 else max(xfromy(0), xfromy(1))
+                    maxx = 1.0 if 0 <= xintercept1 <= 1 else max(xfromy(0), xfromy(1))
                     minx, maxx = tuple(sorted([minx, maxx]))
                     
+                    if not(0 <= minx <= maxx <= 1):
+                        print minx, maxx, xfromy(0), xfromy(1), yfromx(0), yfromx(1)
                     assert(0 <= minx <= maxx <= 1)
                     
                     rangesize = (maxx-minx) / iteration
@@ -1062,7 +1096,9 @@ class SanderSimplify(object):
                         rangemin += (minx-rangemin)
                     if rangemax > maxx: rangemax = maxx
                     if rangemin < minx: rangemin = minx
-        
+                    if rangemax < rangemin:
+                        rangemin, rangemax = rangemax, rangemin
+                        
                     assert(0 <= rangemin <= rangemax <= 1)
                     
                     samples = 10.0
@@ -1122,9 +1158,11 @@ class SanderSimplify(object):
         self.chart_masks = {}
         for face, facedata in self.facegraph.nodes_iter(data=True):
             relsize = int(math.sqrt((facedata['L2'] / self.total_L2) * TEXTURE_SIZE))
+            if relsize < 4: relsize = 4
             
-            #round to power of 2
-            relsize = int(math.pow(2, round(math.log(relsize, 2))))
+            #round to power of 2 with 1 pixel border
+            relsize = int(math.pow(2, round(math.log(relsize, 2)))) - 2
+            
             self.facegraph.node[face]['chartsize'] = relsize
             
             chartim = Image.new('RGB', (relsize, relsize))
@@ -1148,11 +1186,15 @@ class SanderSimplify(object):
                     prevu = prevuvs[:,0] * diffuse_source.size[0]
                     prevv = (1.0-prevuvs[:,1]) * diffuse_source.size[1]
                     prevtri = [(prevu[0], prevv[0]), (prevu[1], prevv[1]), (prevu[2], prevv[2])]
-                    transformblit(prevtri, newtri, diffuse_source, chartim)
+                    try:
+                        transformblit(prevtri, newtri, diffuse_source, chartim)
+                    except numpy.linalg.LinAlgError:
+                        #can happen if the new triangle is a single point, so no need to paint it
+                        pass
             self.chart_ims[face] = chartim
             self.chart_masks[face] = chartmask
 
-            rp.addRectangle(face, relsize, relsize)
+            rp.addRectangle(face, relsize+2, relsize+2)
         assert(rp.pack())
         self.chart_packing = rp
         
@@ -1198,18 +1240,26 @@ class SanderSimplify(object):
 
         self.contraction_priorities = []
 
-#        (A, b, c, area, normal) = quadricsForTriangles(self.all_vertices[self.all_vert_indices])
-#        print 'A2', A
-#        print 'b2', b
-#        print 'c2', c
-#        print 'area', area
-#        print 'normal', normal
-#        
-#        self.vert_quadric_A = numpy.zeros(shape=(len(self.all_vertices), 3, 3))
-#        self.vert_quadric_b = numpy.zeros(shape=(len(self.all_vertices), 3, 1))
-#        
-#        raw_input()
+        (A, b, c, area, normal) = quadricsForTriangles(self.all_vertices[self.all_vert_indices])
+        
+        self.vert_quadric_A = numpy.zeros(shape=(len(self.all_vertices), 3, 3))
+        self.vert_quadric_b = numpy.zeros(shape=(len(self.all_vertices), 3))
+        self.vert_quadric_c = numpy.zeros(shape=(len(self.all_vertices)))
+        
+        self.vert_quadric_A[self.all_vert_indices[:,0]] += A / 3.0
+        self.vert_quadric_A[self.all_vert_indices[:,1]] += A / 3.0
+        self.vert_quadric_A[self.all_vert_indices[:,2]] += A / 3.0
+        
+        self.vert_quadric_b[self.all_vert_indices[:,0]] += b / 3.0
+        self.vert_quadric_b[self.all_vert_indices[:,1]] += b / 3.0
+        self.vert_quadric_b[self.all_vert_indices[:,2]] += b / 3.0
+        
+        self.vert_quadric_c[self.all_vert_indices[:,0]] += c / 3.0
+        self.vert_quadric_c[self.all_vert_indices[:,1]] += c / 3.0
+        self.vert_quadric_c[self.all_vert_indices[:,2]] += c / 3.0
 
+        self.maxerror = 0
+        
         for (vv1, vv2) in self.vertexgraph.edges_iter():
             for (v1, v2) in ((vv1,vv2),(vv2,vv1)):
                 #considering (v1,v2) -> v1
@@ -1271,7 +1321,15 @@ class SanderSimplify(object):
                 if invalid_contraction:
                     continue
                 
-                self.contraction_priorities.append((total_texture_diff, (v1, v2)))
+                combined_A = self.vert_quadric_A[v1] + self.vert_quadric_A[v2]
+                combined_b = self.vert_quadric_b[v1] + self.vert_quadric_b[v2]
+                combined_c = self.vert_quadric_c[v1] + self.vert_quadric_c[v2]
+                quadric_error = evalQuadric(combined_A, combined_b, combined_c, self.all_vertices[v1])
+                combined_error = total_texture_diff + quadric_error
+                if combined_error > self.maxerror:
+                    self.maxerror = combined_error
+                
+                self.contraction_priorities.append((combined_error, (v1, v2)))
                 
 
         heapq.heapify(self.contraction_priorities)
@@ -1284,7 +1342,7 @@ class SanderSimplify(object):
         self.tris_left = set(xrange(len(self.all_vert_indices)))
         
         while len(self.contraction_priorities) > 0:
-            (texture_diff, (v1, v2)) = heapq.heappop(self.contraction_priorities)
+            (error, (v1, v2)) = heapq.heappop(self.contraction_priorities)
             
             #considering (v1,v2) -> v1
             
@@ -1292,7 +1350,13 @@ class SanderSimplify(object):
             if v1 not in self.vertexgraph or v2 not in self.vertexgraph:
                 continue
 
-            #print 'texture_diff', texture_diff, 'v1', v1, 'v2', v2, 'numverts', len(self.vertexgraph), 'numfaces', len(self.tris_left), 'contractions left', len(self.contraction_priorities)
+            #cutoff value was chosen which seems to work well for most models
+            if error > 0:
+                logrel = math.log(1 + error) / math.log(1 + self.maxerror)
+            else: logrel = 0
+            if logrel > SIMPLIFICATION_ERROR_THRESHOLD:
+                break
+            #print 'error', error, 'logerr', logrel, 'v1', v1, 'v2', v2, 'numverts', len(self.vertexgraph), 'numfaces', len(self.tris_left), 'contractions left', len(self.contraction_priorities)
             
             v2tris = list(self.vertexgraph.node[v2]['tris'])
             v1tris = self.vertexgraph.node[v1]['tris']
@@ -1300,6 +1364,7 @@ class SanderSimplify(object):
             
             degenerate = set()
             new_contractions = set()
+            invalid_contraction = False
             for t2, t2_idx in izip(v2tris, v2tri_idx):
                 if v1 in t2_idx:
                     degenerate.add(t2)
@@ -1314,6 +1379,11 @@ class SanderSimplify(object):
                     self.all_vert_indices[t2][where_v2] = v1
                     facefrom = self.tri2face[t2]
                     face_vert2uvidx = self.facegraph.node[facefrom]['vert2uvidx']
+                    if v1 not in face_vert2uvidx:
+                        #this can happen if this triangle was created by a different
+                        # merge and so we didn't check this constraint when considering the edge before
+                        invalid_contraction = True
+                        break
                     self.new_uv_indices[t2][where_v2] = face_vert2uvidx[v1]
                     
                     #add tri to v1's list now that we moved it
@@ -1338,6 +1408,9 @@ class SanderSimplify(object):
                     new_contractions.add((v1, t2_idx[other1]))
                     new_contractions.add((v1, t2_idx[other2]))
             
+            if invalid_contraction:
+                continue
+            
             #remove the degenerate triangle from the triangle list of other vertices in the triangle
             for tri in degenerate:
                 for v in self.all_vert_indices[tri]:
@@ -1348,6 +1421,11 @@ class SanderSimplify(object):
             
             #remove vertex from graph
             self.vertexgraph.remove_node(v2)
+            
+            #update quadric
+            self.vert_quadric_A[v1] += self.vert_quadric_A[v2]
+            self.vert_quadric_b[v1] += self.vert_quadric_b[v2]
+            self.vert_quadric_c[v1] += self.vert_quadric_c[v2]
             
             #now update priority list with new valid contractions
             for (v1, v2) in new_contractions:
@@ -1410,7 +1488,15 @@ class SanderSimplify(object):
                 if invalid_contraction:
                     continue
                 
-                heapq.heappush(self.contraction_priorities, (total_texture_diff, (v1, v2)))
+                combined_A = self.vert_quadric_A[v1] + self.vert_quadric_A[v2]
+                combined_b = self.vert_quadric_b[v1] + self.vert_quadric_b[v2]
+                combined_c = self.vert_quadric_c[v1] + self.vert_quadric_c[v2]
+                quadric_error = evalQuadric(combined_A, combined_b, combined_c, self.all_vertices[v1])
+                combined_error = total_texture_diff + quadric_error
+                if combined_error > self.maxerror:
+                    self.maxerror = combined_error
+                
+                heapq.heappush(self.contraction_priorities, (combined_error, (v1, v2)))
             
         self.end_operation()
 
@@ -1421,6 +1507,12 @@ class SanderSimplify(object):
         for face, chartim in self.chart_ims.iteritems():
             
             x,y,w,h = self.chart_packing.getPlacement(face)
+            #adjust for 1 pixel border
+            x += 1
+            y += 1
+            w -= 2
+            h -= 2
+            
             self.atlasimg.paste(chartim, (x,y,x+w,y+h))
             atlasmask.paste(self.chart_masks[face], (x,y,x+w,y+h))
             x,y,w,h,width,height = (float(i) for i in (x,y,w,h,self.chart_packing.width,self.chart_packing.height))
@@ -1446,7 +1538,7 @@ class SanderSimplify(object):
 
         #do the inpainting
         cv_painted_im = cv.CloneImage(cv_im)
-        cv.Inpaint(cv_im, cv_mask, cv_painted_im, 3, cv.CV_INPAINT_NS)
+        cv.Inpaint(cv_im, cv_mask, cv_painted_im, 3, cv.CV_INPAINT_TELEA)
 
         #convert back to PIL
         self.atlasimg = Image.fromstring("RGB", cv.GetSize(cv_painted_im), cv_painted_im.tostring())

@@ -170,6 +170,8 @@ def super_cycle(G):
     """Yields the nodes of the longest cycle available in G"""
     
     cycles = nx.algorithms.cycles.cycle_basis(G)
+    if len(cycles) < 1:
+        return
     cycle_sets = [set(c) for c in cycles]
     visited_cycles = set()
     
@@ -183,5 +185,5 @@ def super_cycle(G):
                     for othernode in visit_cycle(i, node):
                         yield othernode
             yield node
-        
+    
     return visit_cycle(0, cycles[0][0])
