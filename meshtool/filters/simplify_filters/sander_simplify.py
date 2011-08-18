@@ -1119,6 +1119,7 @@ class SanderSimplify(object):
         TEXTURE_SIZE = TEXTURE_DIMENSION * TEXTURE_DIMENSION
         rp = RectPack(TEXTURE_DIMENSION*2, TEXTURE_DIMENSION*2)
         self.chart_ims = {}
+        self.chart_masks = {}
         for face, facedata in self.facegraph.nodes_iter(data=True):
             relsize = int(math.sqrt((facedata['L2'] / self.total_L2) * TEXTURE_SIZE))
             
@@ -1127,6 +1128,8 @@ class SanderSimplify(object):
             self.facegraph.node[face]['chartsize'] = relsize
             
             chartim = Image.new('RGB', (relsize, relsize))
+            chartmask = Image.new('L', (relsize, relsize), 255)
+            maskdraw = ImageDraw.Draw(chartmask)
             chartdraw = ImageDraw.Draw(chartim)
             for tri in facedata['tris']:
                 
@@ -1134,6 +1137,7 @@ class SanderSimplify(object):
                 newu = (newuvs[:,0] * (relsize-0.5))
                 newv = ((1.0-newuvs[:,1]) * (relsize-0.5))
                 newtri = [(newu[0], newv[0]), (newu[1], newv[1]), (newu[2], newv[2])]
+                maskdraw.polygon(newtri, fill=0, outline=0)
                 
                 diffuse_source = self.material2color[self.tri2material[bisect.bisect(self.tri2material, (tri,0)) - 1][1]]
                 if isinstance(diffuse_source, tuple):
@@ -1146,6 +1150,7 @@ class SanderSimplify(object):
                     prevtri = [(prevu[0], prevv[0]), (prevu[1], prevv[1]), (prevu[2], prevv[2])]
                     transformblit(prevtri, newtri, diffuse_source, chartim)
             self.chart_ims[face] = chartim
+            self.chart_masks[face] = chartmask
 
             rp.addRectangle(face, relsize, relsize)
         assert(rp.pack())
@@ -1193,17 +1198,17 @@ class SanderSimplify(object):
 
         self.contraction_priorities = []
 
-        (A, b, c, area, normal) = quadricsForTriangles(self.all_vertices[self.all_vert_indices])
-        print 'A2', A
-        print 'b2', b
-        print 'c2', c
-        print 'area', area
-        print 'normal', normal
-        
-        self.vert_quadric_A = numpy.zeros(shape=(len(self.all_vertices), 3, 3))
-        self.vert_quadric_b = numpy.zeros(shape=(len(self.all_vertices), 3, 1))
-        
-        raw_input()
+#        (A, b, c, area, normal) = quadricsForTriangles(self.all_vertices[self.all_vert_indices])
+#        print 'A2', A
+#        print 'b2', b
+#        print 'c2', c
+#        print 'area', area
+#        print 'normal', normal
+#        
+#        self.vert_quadric_A = numpy.zeros(shape=(len(self.all_vertices), 3, 3))
+#        self.vert_quadric_b = numpy.zeros(shape=(len(self.all_vertices), 3, 1))
+#        
+#        raw_input()
 
         for (vv1, vv2) in self.vertexgraph.edges_iter():
             for (v1, v2) in ((vv1,vv2),(vv2,vv1)):
@@ -1412,10 +1417,12 @@ class SanderSimplify(object):
     def pack_charts(self):
         self.begin_operation('(Step 6 of 7) Creating and packing charts into atlas...')
         self.atlasimg = Image.new('RGB', (self.chart_packing.width, self.chart_packing.height))
+        atlasmask = Image.new('L', (self.chart_packing.width, self.chart_packing.height), 255)
         for face, chartim in self.chart_ims.iteritems():
             
             x,y,w,h = self.chart_packing.getPlacement(face)
             self.atlasimg.paste(chartim, (x,y,x+w,y+h))
+            atlasmask.paste(self.chart_masks[face], (x,y,x+w,y+h))
             x,y,w,h,width,height = (float(i) for i in (x,y,w,h,self.chart_packing.width,self.chart_packing.height))
     
             chart_tris = [f for f in self.facegraph.node[face]['tris'] if f in self.tris_left]
@@ -1424,6 +1431,26 @@ class SanderSimplify(object):
             #this rescales the texcoords to map to the new atlas location
             self.new_uvs[chart_idx,0] = (self.new_uvs[chart_idx,0] * (w-0.5) + x) / width
             self.new_uvs[chart_idx,1] = 1.0 - (( (1.0-self.new_uvs[chart_idx,1]) * (h-0.5) + y ) / height)
+
+        docvfill = True
+        try: import cv
+        except ImportError: docvfill = False
+        if not docvfill:
+            return self.end_operation()
+
+        #convert image and mask to opencv format
+        cv_im = cv.CreateImageHeader(self.atlasimg.size, cv.IPL_DEPTH_8U, 3)
+        cv.SetData(cv_im, self.atlasimg.tostring())
+        cv_mask = cv.CreateImageHeader(atlasmask.size, cv.IPL_DEPTH_8U, 1)
+        cv.SetData(cv_mask, atlasmask.tostring())
+
+        #do the inpainting
+        cv_painted_im = cv.CloneImage(cv_im)
+        cv.Inpaint(cv_im, cv_mask, cv_painted_im, 3, cv.CV_INPAINT_NS)
+
+        #convert back to PIL
+        self.atlasimg = Image.fromstring("RGB", cv.GetSize(cv_painted_im), cv_painted_im.tostring())
+
         self.end_operation()
 
     def save_mesh(self):
