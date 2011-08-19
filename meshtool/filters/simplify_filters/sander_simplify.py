@@ -335,7 +335,7 @@ class SanderSimplify(object):
                     self.all_orig_uv_indices.append(boundprim.texcoord_indexset[0] + self.uv_offset)
                     self.uv_offset += len(boundprim.texcoordset[0])
                 else:
-                    self.all_orig_uv_indices.append(numpy.zeros(shape=(len(boundprim.index), 3)))
+                    self.all_orig_uv_indices.append(numpy.zeros(shape=(len(boundprim.index), 3), dtype=numpy.int32))
                 
                 self.tri2material.append((self.index_offset, boundprim.material))
                 self.index_offset += len(boundprim.index)
@@ -510,10 +510,10 @@ class SanderSimplify(object):
             #check if boundary is more than one connected component
             connected_components_graph = nx.from_edgelist(combined_edges)
             if nx.algorithms.components.connected.number_connected_components(connected_components_graph) > 1:
-                if len(edges1) == 3 and len(edges2) == 3: print 'rejecting cc1'
                 continue
+            #check if boundary has more than one cycle, which can happen when one chart is
+            # connected to another by an interior edge
             if len(nx.algorithms.cycles.cycle_basis(connected_components_graph)) != 1:
-                print 'invalid merge because of too many cycles'
                 continue
     
             # if the number of corners of the merged face is less than 3, disqualify it
@@ -606,11 +606,6 @@ class SanderSimplify(object):
     
             if invalidmerge:
                 continue
-            
-            bordergraph = nx.from_edgelist(combined_edges)
-            if len(list(super_cycle(bordergraph))) < 1:
-                print 'bad merge!!'
-                raw_input()
             
             #only add edges to neighbors that are already neighbors
             valid_neighbors = set(self.facegraph.neighbors(face1))
@@ -742,11 +737,6 @@ class SanderSimplify(object):
             combined_corners = corners1.intersection(corners2).intersection(shared_vertices)
             
             if len(combined_corners) < 1 or len(combined_corners) > 2:
-                print 'warn combined corners wrong', len(combined_corners)
-                #fakegraph = nx.Graph()
-                #fakegraph.add_node(-2, tris=tris1)
-                #fakegraph.add_node(-1, tris=tris2)
-                #renderCharts(fakegraph, self.all_vertices, self.all_vert_indices, lineset=[shared_edges])
                 continue
             
             giveup = False
@@ -773,7 +763,6 @@ class SanderSimplify(object):
                     shared_path.append(sanedge)
                     nextopts = pt2edge[nextpt]
                     if edge not in nextopts:
-                        print 'warn corner1 bad'
                         giveup = True
                         break
                     nextopts.remove(edge)
@@ -800,7 +789,6 @@ class SanderSimplify(object):
                                                heuristic=lambda x,y: v3dist(self.all_vertices[x], self.all_vertices[y]),
                                                weight='distance', subset=constrained_set, exclude=stop_nodes)
             except nx.exception.NetworkXNoPath:
-                print 'warn no path'
                 continue
             
             # if we already have the shortest path, nothing to do
@@ -820,7 +808,6 @@ class SanderSimplify(object):
             # it was because the cost was too high or it would violate one of
             # the constraints, so just ignore this 
             if len(new_edges1) == 0 or len(new_edges2) == 0:
-                print 'warn new edges 0'
                 continue
             
             boundary1 = set(chain.from_iterable(new_edges1))
@@ -856,7 +843,6 @@ class SanderSimplify(object):
             
             #this can happen if the straightened path cuts off another face's edges
             if len(trisneither) != 0:
-                print 'warn trisneither'
                 continue
             
             # This can happen if the shortest path actually encompasses
@@ -865,49 +851,57 @@ class SanderSimplify(object):
             # it was because the cost was too high or it would violate one of
             # the constraints, so just ignore this 
             if len(tris1) == 0 or len(tris2) == 0:
-                print 'warn one was 0'
                 continue
             
             #this can happen if the straightened path cuts off another face's edges
             if len(tris1) + len(tris2) != len(combined_tris):
-                print 'warn cutoff'
                 continue
     
             new_edges1 = new_edges1.union(new_combined_edges)
             new_edges2 = new_edges2.union(new_combined_edges)
     
             bordergraph1 = nx.from_edgelist(new_edges1)
-            if len(list(super_cycle(bordergraph1))) < 1:
-                print 'bad straighten1!!'
-                raw_input()
+            supcycle1 = super_cycle(bordergraph1)
+            if supcycle1 is None or len(list(supcycle1)) < 1:
+                continue
             bordergraph2 = nx.from_edgelist(new_edges2)
-            if len(list(super_cycle(bordergraph2))) < 1:
-                print 'bad straighten2!!'
-                raw_input()
+            supcycle2 = super_cycle(bordergraph2)
+            if supcycle2 is None or len(list(supcycle2)) < 1:
+                continue
     
             #if we stole edges from one face to the other, fix it
+            edges_to_add = []
+            edges_to_remove = []
             for otherface in self.facegraph.neighbors_iter(face1):
                 if otherface == face2:
                     continue
                 otheredges = self.facegraph.node[otherface]['edges']
                 face1otheredges = otheredges.intersection(new_edges1)
                 if len(face1otheredges) == 0:
-                    print 'warn otherone subsumed'
+                    edges_to_remove.append((otherface, face1))
+                    edges_to_add.append((otherface, face2))
             for otherface in self.facegraph.neighbors_iter(face2):
                 if otherface == face1:
                     continue
                 otheredges = self.facegraph.node[otherface]['edges']
                 face2otheredges = otheredges.intersection(new_edges2)
                 if len(face2otheredges) == 0:
-                    print 'warn otherone subsumed'
+                    edges_to_remove.append((otherface, face2))
+                    edges_to_add.append((otherface, face1))
                 
             #check if boundary is more than one connected component
             connected_components_graph = nx.from_edgelist(new_combined_edges)
             if nx.algorithms.components.connected.number_connected_components(connected_components_graph) > 1:
-                'rejecting cc4'
                 continue
             if len(nx.algorithms.cycles.cycle_basis(connected_components_graph)) > 1:
-                print 'invalid straighten because of too many cycles'
+                continue
+                
+            #ideally we would swap these edges, but this would require revisiting these faces
+            # in the loop above, and so we can't do that easily. instead, just disallow
+            # a straigtening that would cause the two faces to have to swap neighbors
+            #self.facegraph.remove_edges_from(edges_to_remove)
+            #self.facegraph.add_edges_from(edges_to_add)
+            if len(edges_to_remove) > 0 or len(edges_to_add) > 0:
                 continue
                 
             #update adjaceny in vertex graph for swapped
@@ -971,9 +965,9 @@ class SanderSimplify(object):
                     vert2idx[v] = i
                 
                 A = numpy.zeros(shape=(len(interior_verts), len(interior_verts)), dtype=numpy.float32)
-                Bu = numpy.zeros(len(interior_verts))
-                Bv = numpy.zeros(len(interior_verts))
-                sumu = numpy.zeros(len(interior_verts))
+                Bu = numpy.zeros(len(interior_verts), dtype=numpy.float32)
+                Bv = numpy.zeros(len(interior_verts), dtype=numpy.float32)
+                sumu = numpy.zeros(len(interior_verts), dtype=numpy.float32)
                 
                 for edge in self.vertexgraph.subgraph(unique_verts).edges_iter():
                     v1, v2 = edge
@@ -1229,8 +1223,15 @@ class SanderSimplify(object):
         for face, facedata in self.facegraph.nodes_iter(data=True):
             self.all_corners = self.all_corners.union(facedata['corners'])
             self.all_edge_verts = self.all_edge_verts.union(set(chain.from_iterable(facedata['edges'])))
+            facev2uv = self.facegraph.node[face]['vert2uvidx']
             for tri in facedata['tris']:
                 self.tri2face[tri] = face
+                for v in self.all_vert_indices[tri]:
+                    if v not in facev2uv:
+                        print 'WTF'
+                        print v
+                        print facev2uv
+                        raw_input()
 
         self.vertexgraph.add_nodes_from(( (i, {'tris':set()}) for i in xrange(len(self.all_vertices))))
         for i, (v1,v2,v3) in enumerate(self.all_vert_indices):
@@ -1242,9 +1243,9 @@ class SanderSimplify(object):
 
         (A, b, c, area, normal) = quadricsForTriangles(self.all_vertices[self.all_vert_indices])
         
-        self.vert_quadric_A = numpy.zeros(shape=(len(self.all_vertices), 3, 3))
-        self.vert_quadric_b = numpy.zeros(shape=(len(self.all_vertices), 3))
-        self.vert_quadric_c = numpy.zeros(shape=(len(self.all_vertices)))
+        self.vert_quadric_A = numpy.zeros(shape=(len(self.all_vertices), 3, 3), dtype=numpy.float32)
+        self.vert_quadric_b = numpy.zeros(shape=(len(self.all_vertices), 3), dtype=numpy.float32)
+        self.vert_quadric_c = numpy.zeros(shape=(len(self.all_vertices)), dtype=numpy.float32)
         
         self.vert_quadric_A[self.all_vert_indices[:,0]] += A / 3.0
         self.vert_quadric_A[self.all_vert_indices[:,1]] += A / 3.0
@@ -1341,6 +1342,15 @@ class SanderSimplify(object):
         
         self.tris_left = set(xrange(len(self.all_vert_indices)))
         
+        for v in self.vertexgraph.nodes_iter():
+            tris = self.vertexgraph.node[v]['tris']
+            for t in tris:
+                if v not in self.all_vert_indices[t]:
+                    print 'WTF'
+                    print v
+                    print tris
+                    raw_input()
+        
         while len(self.contraction_priorities) > 0:
             (error, (v1, v2)) = heapq.heappop(self.contraction_priorities)
             
@@ -1362,9 +1372,19 @@ class SanderSimplify(object):
             v1tris = self.vertexgraph.node[v1]['tris']
             v2tri_idx = self.all_vert_indices[v2tris]
             
+            invalid_contraction = False
+            for t2 in v2tris:
+                facefrom = self.tri2face[t2]
+                if v1 not in self.facegraph.node[facefrom]['vert2uvidx']:
+                    #this can happen if this triangle was created by a different
+                    # merge and so we didn't check this constraint when considering the edge before
+                    invalid_contraction = True
+                    break
+            if invalid_contraction:
+                continue
+            
             degenerate = set()
             new_contractions = set()
-            invalid_contraction = False
             for t2, t2_idx in izip(v2tris, v2tri_idx):
                 if v1 in t2_idx:
                     degenerate.add(t2)
@@ -1376,14 +1396,9 @@ class SanderSimplify(object):
                     other2 = where_not_v2[0][1]
                     
                     #update vert and uv index values from v2 to v1
-                    self.all_vert_indices[t2][where_v2] = v1
                     facefrom = self.tri2face[t2]
                     face_vert2uvidx = self.facegraph.node[facefrom]['vert2uvidx']
-                    if v1 not in face_vert2uvidx:
-                        #this can happen if this triangle was created by a different
-                        # merge and so we didn't check this constraint when considering the edge before
-                        invalid_contraction = True
-                        break
+                    self.all_vert_indices[t2][where_v2] = v1
                     self.new_uv_indices[t2][where_v2] = face_vert2uvidx[v1]
                     
                     #add tri to v1's list now that we moved it
@@ -1408,9 +1423,6 @@ class SanderSimplify(object):
                     new_contractions.add((v1, t2_idx[other1]))
                     new_contractions.add((v1, t2_idx[other2]))
             
-            if invalid_contraction:
-                continue
-            
             #remove the degenerate triangle from the triangle list of other vertices in the triangle
             for tri in degenerate:
                 for v in self.all_vert_indices[tri]:
@@ -1425,7 +1437,7 @@ class SanderSimplify(object):
             #update quadric
             self.vert_quadric_A[v1] += self.vert_quadric_A[v2]
             self.vert_quadric_b[v1] += self.vert_quadric_b[v2]
-            self.vert_quadric_c[v1] += self.vert_quadric_c[v2]
+            self.vert_quadric_c[v1] += self.vert_quadric_c[v2]       
             
             #now update priority list with new valid contractions
             for (v1, v2) in new_contractions:
@@ -1457,6 +1469,7 @@ class SanderSimplify(object):
                     face_vert2uvidx = self.facegraph.node[facefrom]['vert2uvidx']
                     
                     moved_vert_idx = self.all_vert_indices[moved_tri_idx]
+                    
                     other_pts = self.new_uvs[[ face_vert2uvidx[m]
                                  for m in moved_vert_idx if m != v2 ]]
                     
