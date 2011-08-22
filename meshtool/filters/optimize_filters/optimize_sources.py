@@ -4,11 +4,6 @@ import collada
 import numpy
 import inspect
 
-#after python2.5, uniqu1d was renamed to unique
-args, varargs, keywords, defaults = inspect.getargspec(numpy.unique)
-if 'return_inverse' not in args:
-    numpy.unique = numpy.unique1d
-
 def optimizeSources(mesh):
     
     for geom in mesh.geometries:

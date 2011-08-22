@@ -24,57 +24,6 @@ import bisect
 
 ImageFile.MAXBLOCK = 20*1024*1024 # default is 64k, setting to 20MB to handle large textures
 
-#python 2.5 set
-if not 'set' in __builtin__.__dict__:
-    import sets
-    set = sets.Set
-
-#after python2.5, uniqu1d was renamed to unique
-args, varargs, keywords, defaults = inspect.getargspec(numpy.unique)
-if 'return_inverse' not in args:
-    numpy.unique = numpy.unique1d
-
-#next for py 2.5
-try: next
-except NameError:
-    def next ( obj ): return obj.next()
-
-#chain.from_iterable is not in 2.5
-try: chain.from_iterable
-except AttributeError:
-    _chain = chain
-    class ChainWrapper(chain):
-        def __call__(self, *args, **kwargs):
-            return _chain(*args, **kwargs)
-        @classmethod
-        def from_iterable(self, iterables):
-            for it in iterables:
-                for element in it:
-                    yield element
-    chain = ChainWrapper()
-
-#itertools.combinations is not in python 2.5
-try:
-    from itertools import combinations
-except ImportError:
-    def combinations(iterable, r):
-        pool = tuple(iterable)
-        n = len(pool)
-        if r > n:
-            return
-        indices = range(r)
-        yield tuple(pool[i] for i in indices)
-        while True:
-            for i in reversed(range(r)):
-                if indices[i] != i + n - r:
-                    break
-            else:
-                return
-            indices[i] += 1
-            for j in range(i+1, r):
-                indices[j] = indices[j-1] + 1
-            yield tuple(pool[i] for i in indices)
-
 #Error threshold values, range 0-1
 MERGE_ERROR_THRESHOLD = 0.88
 SIMPLIFICATION_ERROR_THRESHOLD = 0.50
