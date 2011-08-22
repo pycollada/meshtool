@@ -3,7 +3,7 @@ from meshtool.filters.base_filters import *
 import inspect
 import numpy
 import networkx as nx
-from itertools import chain, izip
+from itertools import chain, izip, combinations
 import datetime
 import math
 import __builtin__
@@ -25,8 +25,8 @@ import bisect
 ImageFile.MAXBLOCK = 20*1024*1024 # default is 64k, setting to 20MB to handle large textures
 
 #Error threshold values, range 0-1
-MERGE_ERROR_THRESHOLD = 0.88
-SIMPLIFICATION_ERROR_THRESHOLD = 0.50
+MERGE_ERROR_THRESHOLD = 0.90
+SIMPLIFICATION_ERROR_THRESHOLD = 0.001
 
 def timer():
     begintime = datetime.datetime.now()
@@ -34,6 +34,34 @@ def timer():
         curtime = datetime.datetime.now()
         yield (curtime-begintime)
         begintime = curtime
+
+def seg_intersect(a1,a2, b1,b2):
+    """line segment intersection using vectors
+    see Computer Graphics by F.S. Hill
+    
+    line segment a given by endpoints a1, a2
+    line segment b given by endpoints b1, b2
+    
+    returns point (c1,d1) where the two line
+    segments intersect or None if lines don't intersect
+    
+    Original code from http://www.cs.mun.ca/~rod/2500/notes/numpy-arrays/numpy-arrays.html
+    """
+    da = a2-a1
+    db = b2-b1
+    dp = a1-b1
+    
+    dap = numpy.copy(da)
+    dap[0] = -da[1]
+    dap[1] = da[0]
+    
+    denom = numpy.dot(dap, db)
+    num = numpy.dot(dap, dp)
+    intersect = (num / denom)*db + b1
+    if intersect[0] > max(a1[0], a2[0]) or intersect[0] < min(a1[0], a2[0]) or \
+        intersect[1] > max(a1[1], a2[1]) or intersect[1] < min(a1[1], a2[1]):
+        return None
+    return intersect
          
 def calcPerimeter(pts):
     """Calculates the perimeter of an area by 
@@ -44,6 +72,11 @@ def calcPerimeter(pts):
     dz = pts[:,0,2]-pts[:,1,2]
     return numpy.sum(numpy.sqrt(dx*dx + dy*dy + dz*dz))
 
+def v2dist(pt1, pt2):
+    """Calculates the distance between two 2d points element-wise
+    along an array"""
+    d = pt1 - pt2
+    return math.sqrt(d[0]*d[0] + d[1]*d[1])
 def v3dist(pt1, pt2):
     """Calculates the distance between two 3d points element-wise
     along an array"""
@@ -227,11 +260,6 @@ def quadricsForTriangles(tris):
     area = numpy.where(area < 0, area_zeros, numpy.sqrt(area))
     area_zeros = None
     
-    #area = numpy.sqrt(numpy.abs(area))
-    
-    #print 'area', area
-    #print 
-    
     d = -array_mult(normal, tris[:,0])
 
     b = normal * (area*d)[:,numpy.newaxis]
@@ -241,7 +269,7 @@ def quadricsForTriangles(tris):
                        normal[:,1][:,numpy.newaxis] * normal,
                        normal[:,2][:,numpy.newaxis] * normal))
     A = area[:,numpy.newaxis,numpy.newaxis] * A
-    
+   
     return (A, b, c, area, normal)
 
 class SanderSimplify(object):
@@ -1163,6 +1191,101 @@ class SanderSimplify(object):
         
         self.end_operation()
 
+    def evaluate_edge_collapse(self, v1, v2):
+        #considering (v1,v2) -> v1
+        
+        #can't remove corners
+        if v2 in self.all_corners:
+            return
+        
+        #need to preserve boundary straightness
+        if v2 in self.all_edge_verts and v1 not in self.all_edge_verts:
+            return
+
+        v2tris = list(self.vertexgraph.node[v2]['tris'])
+        v2tri_idx = self.all_vert_indices[v2tris]
+        
+        moved = set()
+        degenerate = set()
+        degenerate_segments = []
+        for t2, t2_idx in izip(v2tris, v2tri_idx):
+            if v1 in t2_idx:
+                degenerate.add(t2)
+                facefrom = self.tri2face[t2]
+                face_vert2uvidx = self.facegraph.node[facefrom]['vert2uvidx']
+                other_vert = [v for v in t2_idx if v != v1 and v != v2][0]
+                degen_3d = (self.all_vertices[other_vert], self.all_vertices[v2])
+                degen_uv = (self.new_uvs[face_vert2uvidx[other_vert]], self.new_uvs[face_vert2uvidx[v2]])
+                degenerate_segments.append((degen_3d, degen_uv))
+            else:
+                moved.add(t2)
+
+        texture_stretches = []
+        for moved_tri_idx in moved:
+            facefrom = self.tri2face[moved_tri_idx]
+            face_vert2uvidx = self.facegraph.node[facefrom]['vert2uvidx']
+            
+            moved_vert_idx = self.all_vert_indices[moved_tri_idx]
+            other_pts = [ m for m in moved_vert_idx if m != v2 ]
+            other_uv_pts = [ self.new_uvs[face_vert2uvidx[m]] for m in other_pts ]
+            
+            #m = (y2-y1)/(x2-x1)
+            slope = (other_uv_pts[1][1] - other_uv_pts[0][1]) / (other_uv_pts[1][0] - other_uv_pts[0][0])
+            #y = mx + b
+            #b = y-mx
+            yint = other_uv_pts[0][1] - slope * other_uv_pts[0][0]
+        
+            #don't want to cross chart boundaries
+            if v1 not in face_vert2uvidx:
+                return
+            
+            v2_pt = self.new_uvs[face_vert2uvidx[v2]]
+            v1_pt = self.new_uvs[face_vert2uvidx[v1]]
+            v2_atline = slope * v2_pt[0] + yint
+            v1_atline = slope * v1_pt[0] + yint
+            
+            #don't want to flip the triangle in the parametric domain
+            if v2_atline > 0 and not(v1_atline > 0) or \
+                v2_atline < 0 and not(v1_atline < 0):
+                return
+
+            other_v3_pts = [self.all_vertices[m] for m in other_pts]
+            v1_3d = self.all_vertices[v1]
+            
+            #the maximum texture deviation could lie at the edge,edge intersection
+            # between the moving edge and a degenerate edge
+            for moving_3d, moving_uv in zip(other_v3_pts, other_uv_pts):
+                for (degen_3d, degen_uv) in degenerate_segments:
+                    #find where the uv coords intersect
+                    intersect_uv = seg_intersect(moving_uv, v1_pt, degen_uv[0], degen_uv[1])
+                    if intersect_uv is None: continue
+
+                    #convert the u,v intersection to 3d for the degenerate edge
+                    degen_uv_dist = v2dist(degen_uv[0], degen_uv[1])
+                    degen_intersect_relative = v2dist(degen_uv[0], intersect_uv) / degen_uv_dist
+                    degen_v3_diff = degen_3d[1] - degen_3d[0]
+                    degen_v3_intersect = degen_3d[0] + degen_v3_diff * degen_intersect_relative
+                    
+                    #and then to 3d for the moving edge
+                    moving_uv_dist = v2dist(moving_uv, v1_pt)
+                    moving_intersect_relative = v2dist(moving_uv, intersect_uv) / moving_uv_dist
+                    moving_v3_diff = v1_3d - moving_3d
+                    moving_v3_intersect = moving_3d + moving_v3_diff * moving_intersect_relative
+
+                    v3_texture_stretch = v3dist(degen_v3_intersect, moving_v3_intersect)
+                    texture_stretches.append(v3_texture_stretch)
+        
+        dist3d_v1_v2 = v3dist(self.all_vertices[v1], self.all_vertices[v2])
+        texture_stretches.append(dist3d_v1_v2)
+        texture_diff = max(texture_stretches) / self.maxdistance
+        
+        combined_A = self.vert_quadric_A[v1] + self.vert_quadric_A[v2]
+        combined_b = self.vert_quadric_b[v1] + self.vert_quadric_b[v2]
+        combined_c = self.vert_quadric_c[v1] + self.vert_quadric_c[v2]
+        quadric_error = evalQuadric(combined_A, combined_b, combined_c, self.all_vertices[v1])
+        combined_error = texture_diff + quadric_error
+        return combined_error
+
     def initialize_simplification_errors(self):
         self.begin_operation('Calculationg priority queue for initial edge contractions...')
         
@@ -1175,12 +1298,6 @@ class SanderSimplify(object):
             facev2uv = self.facegraph.node[face]['vert2uvidx']
             for tri in facedata['tris']:
                 self.tri2face[tri] = face
-                for v in self.all_vert_indices[tri]:
-                    if v not in facev2uv:
-                        print 'WTF'
-                        print v
-                        print facev2uv
-                        raw_input()
 
         self.vertexgraph.add_nodes_from(( (i, {'tris':set()}) for i in xrange(len(self.all_vertices))))
         for i, (v1,v2,v3) in enumerate(self.all_vert_indices):
@@ -1208,74 +1325,45 @@ class SanderSimplify(object):
         self.vert_quadric_c[self.all_vert_indices[:,1]] += c / 3.0
         self.vert_quadric_c[self.all_vert_indices[:,2]] += c / 3.0
 
+        #to preserve borders, we inflate the quadric error for edges that
+        # only have one incident triangle
+        for v1,v2 in self.vertexgraph.edges_iter():
+            tris1 = self.vertexgraph.node[v1]['tris']
+            tris2 = self.vertexgraph.node[v2]['tris']
+            tris_both = tris1.intersection(tris2)
+            if len(tris_both) > 1: continue
+            t = list(tris_both)[0]
+            
+            v = self.all_vertices[v1] - self.all_vertices[v2]
+            normal2 = numpy.cross(v, normal[t])
+            normal2 = normal2 / numpy.linalg.norm(normal2)
+            d = -numpy.dot(normal[t], self.all_vertices[v1])
+            A3 = area[t] * numpy.outer(normal2, normal2)
+            b3 = area[t] * d * normal2
+            c3 = area[t] * d * d
+
+            self.vert_quadric_A[v1] += A3
+            self.vert_quadric_b[v1] += b3
+            self.vert_quadric_c[v1] += c3
+
+        self.total_area = numpy.sum(area)
+        self.vert_quadric_A /= self.total_area
+        self.vert_quadric_b /= self.total_area
+        self.vert_quadric_c /= self.total_area
+
+        #calculate maximum distance in the mesh so we can also normalize texture stretch
+        minx, maxx = numpy.min(self.all_vertices[:,0]), numpy.max(self.all_vertices[:,0])
+        miny, maxy = numpy.min(self.all_vertices[:,1]), numpy.max(self.all_vertices[:,1])
+        minz, maxz = numpy.min(self.all_vertices[:,2]), numpy.max(self.all_vertices[:,2])
+        self.maxdistance = v3dist(numpy.array([minx, miny, minz], dtype=numpy.float32), numpy.array([maxx, maxy, maxz], dtype=numpy.float32))
+
         self.maxerror = 0
         
         for (vv1, vv2) in self.vertexgraph.edges_iter():
             for (v1, v2) in ((vv1,vv2),(vv2,vv1)):
-                #considering (v1,v2) -> v1
-                
-                #can't remove corners
-                if v2 in self.all_corners:
+                combined_error = self.evaluate_edge_collapse(v1,v2)
+                if combined_error is None:
                     continue
-                
-                #need to preserve boundary straightness
-                if v2 in self.all_edge_verts and v1 not in self.all_edge_verts:
-                    continue
-
-                v2tris = list(self.vertexgraph.node[v2]['tris'])
-                v2tri_idx = self.all_vert_indices[v2tris]
-                
-                moved = set()
-                degenerate = set()
-                for t2, t2_idx in izip(v2tris, v2tri_idx):
-                    if v1 in t2_idx:
-                        degenerate.add(t2)
-                    else:
-                        moved.add(t2)
-                
-                invalid_contraction = False
-                total_texture_diff = 0
-                for moved_tri_idx in moved:
-                    facefrom = self.tri2face[moved_tri_idx]
-                    face_vert2uvidx = self.facegraph.node[facefrom]['vert2uvidx']
-                    
-                    moved_vert_idx = self.all_vert_indices[moved_tri_idx]
-                    other_pts = self.new_uvs[[ face_vert2uvidx[m]
-                                 for m in moved_vert_idx if m != v2 ]]
-                    
-                    #m = (y2-y1)/(x2-x1)
-                    slope = (other_pts[1][1] - other_pts[0][1]) / (other_pts[1][0] - other_pts[0][0])
-                    #y = mx + b
-                    #b = y-mx
-                    yint = other_pts[0][1] - slope * other_pts[0][0]
-                
-                    #don't want to cross chart boundaries
-                    if v1 not in face_vert2uvidx:
-                        invalid_contraction = True
-                        break
-                    
-                    v2_pt = self.new_uvs[face_vert2uvidx[v2]]
-                    v1_pt = self.new_uvs[face_vert2uvidx[v1]]
-                    v2_atline = slope * v2_pt[0] + yint
-                    v1_atline = slope * v1_pt[0] + yint
-                    
-                    #don't want to flip the triangle in the parametric domain
-                    if v2_atline > 0 and not(v1_atline > 0) or \
-                        v2_atline < 0 and not(v1_atline < 0):
-                        invalid_contraction = True
-                        break
-                    
-                    texture_diff = math.sqrt((v1_pt[0]-v2_pt[0])**2 + (v1_pt[1]-v2_pt[1])**2)
-                    total_texture_diff += texture_diff
-                
-                if invalid_contraction:
-                    continue
-                
-                combined_A = self.vert_quadric_A[v1] + self.vert_quadric_A[v2]
-                combined_b = self.vert_quadric_b[v1] + self.vert_quadric_b[v2]
-                combined_c = self.vert_quadric_c[v1] + self.vert_quadric_c[v2]
-                quadric_error = evalQuadric(combined_A, combined_b, combined_c, self.all_vertices[v1])
-                combined_error = total_texture_diff + quadric_error
                 if combined_error > self.maxerror:
                     self.maxerror = combined_error
                 
@@ -1290,15 +1378,6 @@ class SanderSimplify(object):
         self.begin_operation('(Step 4 of 7) Simplifying...')
         
         self.tris_left = set(xrange(len(self.all_vert_indices)))
-        
-        for v in self.vertexgraph.nodes_iter():
-            tris = self.vertexgraph.node[v]['tris']
-            for t in tris:
-                if v not in self.all_vert_indices[t]:
-                    print 'WTF'
-                    print v
-                    print tris
-                    raw_input()
         
         while len(self.contraction_priorities) > 0:
             (error, (v1, v2)) = heapq.heappop(self.contraction_priorities)
@@ -1315,7 +1394,7 @@ class SanderSimplify(object):
             else: logrel = 0
             if logrel > SIMPLIFICATION_ERROR_THRESHOLD:
                 break
-            #print 'error', error, 'logerr', logrel, 'v1', v1, 'v2', v2, 'numverts', len(self.vertexgraph), 'numfaces', len(self.tris_left), 'contractions left', len(self.contraction_priorities)
+            #print 'error', error, 'maxerror', self.maxerror, 'logerr', logrel, 'v1', v1, 'v2', v2, 'numverts', len(self.vertexgraph), 'numfaces', len(self.tris_left), 'contractions left', len(self.contraction_priorities)
             
             v2tris = list(self.vertexgraph.node[v2]['tris'])
             v1tris = self.vertexgraph.node[v1]['tris']
@@ -1390,71 +1469,9 @@ class SanderSimplify(object):
             
             #now update priority list with new valid contractions
             for (v1, v2) in new_contractions:
-                #considering (v1,v2) -> v1
-                
-                #can't remove corners
-                if v2 in self.all_corners:
+                combined_error = self.evaluate_edge_collapse(v1,v2)
+                if combined_error is None:
                     continue
-                
-                #need to preserve boundary straightness
-                if v2 in self.all_edge_verts and v1 not in self.all_edge_verts:
-                    continue
-
-                v2tris = list(self.vertexgraph.node[v2]['tris'])
-                v2tri_idx = self.all_vert_indices[v2tris]
-                
-                moved = set()
-                degenerate = set()
-                for t2, t2_idx in izip(v2tris, v2tri_idx):
-                    if v1 in t2_idx:
-                        degenerate.add(t2)
-                    else:
-                        moved.add(t2)
-                
-                invalid_contraction = False
-                total_texture_diff = 0
-                for moved_tri_idx in moved:
-                    facefrom = self.tri2face[moved_tri_idx]
-                    face_vert2uvidx = self.facegraph.node[facefrom]['vert2uvidx']
-                    
-                    moved_vert_idx = self.all_vert_indices[moved_tri_idx]
-                    
-                    other_pts = self.new_uvs[[ face_vert2uvidx[m]
-                                 for m in moved_vert_idx if m != v2 ]]
-                    
-                    #m = (y2-y1)/(x2-x1)
-                    slope = (other_pts[1][1] - other_pts[0][1]) / (other_pts[1][0] - other_pts[0][0])
-                    #y = mx + b
-                    #b = y-mx
-                    yint = other_pts[0][1] - slope * other_pts[0][0]
-                
-                    #don't want to cross chart boundaries
-                    if v1 not in face_vert2uvidx:
-                        invalid_contraction = True
-                        break
-                    
-                    v2_pt = self.new_uvs[face_vert2uvidx[v2]]
-                    v1_pt = self.new_uvs[face_vert2uvidx[v1]]
-                    v2_atline = slope * v2_pt[0] + yint
-                    v1_atline = slope * v1_pt[0] + yint
-                    
-                    #don't want to flip the triangle in the parametric domain
-                    if v2_atline > 0 and not(v1_atline > 0) or \
-                        v2_atline < 0 and not(v1_atline < 0):
-                        invalid_contraction = True
-                        break
-                    
-                    texture_diff = math.sqrt((v1_pt[0]-v2_pt[0])**2 + (v1_pt[1]-v2_pt[1])**2)
-                    total_texture_diff += texture_diff
-                
-                if invalid_contraction:
-                    continue
-                
-                combined_A = self.vert_quadric_A[v1] + self.vert_quadric_A[v2]
-                combined_b = self.vert_quadric_b[v1] + self.vert_quadric_b[v2]
-                combined_c = self.vert_quadric_c[v1] + self.vert_quadric_c[v2]
-                quadric_error = evalQuadric(combined_A, combined_b, combined_c, self.all_vertices[v1])
-                combined_error = total_texture_diff + quadric_error
                 if combined_error > self.maxerror:
                     self.maxerror = combined_error
                 
