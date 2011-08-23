@@ -272,10 +272,20 @@ def quadricsForTriangles(tris):
    
     return (A, b, c, area, normal)
 
+def uniqify_multidim_indexes(sourcedata, indices):
+    unique_data, index_map = numpy.unique(sourcedata.view([('',sourcedata.dtype)]*sourcedata.shape[1]), return_inverse=True)
+    index_map = numpy.cast['int32'](index_map)
+    return unique_data.view(sourcedata.dtype).reshape(-1,sourcedata.shape[1]), index_map[indices]
+
+class STREAM_OP:
+    INDEX_UPDATE = 1
+    TRIANGLE_ADDITION = 2
+
 class SanderSimplify(object):
 
-    def __init__(self, mesh):
+    def __init__(self, mesh, pmbuf):
         self.mesh = mesh
+        self.pmbuf = pmbuf
         
         self.all_vertices = []
         self.all_normals = []
@@ -346,19 +356,14 @@ class SanderSimplify(object):
     def uniqify_list(self):
         self.begin_operation('Uniqifying the list...')
         
-        all_vertices = self.all_vertices
-        
-        unique_data, index_map = numpy.unique(all_vertices.view([('',all_vertices.dtype)]*all_vertices.shape[1]), return_inverse=True)
-        all_vertices = unique_data.view(all_vertices.dtype).reshape(-1,all_vertices.shape[1])
-        self.all_vert_indices = index_map[self.all_vert_indices]
+        self.all_vertices, self.all_vert_indices = uniqify_multidim_indexes(self.all_vertices, self.all_vert_indices)
+        self.all_normals, self.all_normal_indices = uniqify_multidim_indexes(self.all_normals, self.all_normal_indices)
         
         #scale to known range so error values are normalized
-        all_vertices[:,0] -= numpy.min(all_vertices[:,0])
-        all_vertices[:,1] -= numpy.min(all_vertices[:,1])
-        all_vertices[:,2] -= numpy.min(all_vertices[:,2])
-        all_vertices *= 1000.0 / numpy.max(all_vertices)
-        
-        self.all_vertices = all_vertices
+        self.all_vertices[:,0] -= numpy.min(self.all_vertices[:,0])
+        self.all_vertices[:,1] -= numpy.min(self.all_vertices[:,1])
+        self.all_vertices[:,2] -= numpy.min(self.all_vertices[:,2])
+        self.all_vertices *= 1000.0 / numpy.max(self.all_vertices)
         
         self.end_operation()
 
@@ -1367,6 +1372,7 @@ class SanderSimplify(object):
         self.begin_operation('(Step 4 of 7) Simplifying...')
         
         self.tris_left = set(xrange(len(self.all_vert_indices)))
+        self.simplify_operations = []
         
         while len(self.contraction_priorities) > 0:
             (error, (v1, v2)) = heapq.heappop(self.contraction_priorities)
@@ -1400,12 +1406,17 @@ class SanderSimplify(object):
             if invalid_contraction:
                 continue
             
+            #do degenerate first so we can record values for progressive stream
             degenerate = set()
-            new_contractions = set()
             for t2, t2_idx in izip(v2tris, v2tri_idx):
                 if v1 in t2_idx:
                     degenerate.add(t2)
-                else:
+                    self.simplify_operations.append((STREAM_OP.TRIANGLE_ADDITION, t2, t2_idx, self.all_normal_indices[t2], self.new_uv_indices[t2]))
+            
+            new_contractions = set()
+            stream_updates = {}
+            for t2, t2_idx in izip(v2tris, v2tri_idx):
+                if v1 not in t2_idx:
                     #these are triangles that have a vertex moving from v2 to v1
                     where_v2 = numpy.where(t2_idx == v2)[0][0]
                     where_not_v2 = numpy.where(t2_idx != v2)
@@ -1415,7 +1426,9 @@ class SanderSimplify(object):
                     #update vert and uv index values from v2 to v1
                     facefrom = self.tri2face[t2]
                     face_vert2uvidx = self.facegraph.node[facefrom]['vert2uvidx']
+                    prev_vertex_value = self.all_vert_indices[t2][where_v2]
                     self.all_vert_indices[t2][where_v2] = v1
+                    prev_uv_value = self.new_uv_indices[t2][where_v2]
                     self.new_uv_indices[t2][where_v2] = face_vert2uvidx[v1]
                     
                     #add tri to v1's list now that we moved it
@@ -1432,13 +1445,22 @@ class SanderSimplify(object):
                             copy_tri_v1 = facetri
                             break
                     assert(copy_tri_v1 is not None)
+                    prev_normal_value = self.all_normal_indices[t2][where_v2]
                     self.all_normal_indices[t2][where_v2] = self.all_normal_indices[copy_tri_v1][where_v1]
+                    
+                    updated_set = (prev_vertex_value, prev_normal_value, prev_uv_value)
+                    update_list = stream_updates.get(updated_set, [])
+                    update_list.append((t2, where_v2))
+                    stream_updates[updated_set] = update_list
                     
                     #add new candidate merges
                     new_contractions.add((t2_idx[other1], v1))
                     new_contractions.add((t2_idx[other2], v1))
                     new_contractions.add((v1, t2_idx[other1]))
                     new_contractions.add((v1, t2_idx[other2]))
+            
+            for (prev_vertex_value, prev_normal_value, prev_uv_value), update_list in stream_updates.iteritems():
+                self.simplify_operations.append((STREAM_OP.INDEX_UPDATE, prev_vertex_value, prev_normal_value, prev_uv_value, update_list))
             
             #remove the degenerate triangle from the triangle list of other vertices in the triangle
             for tri in degenerate:
@@ -1513,6 +1535,70 @@ class SanderSimplify(object):
 
         self.end_operation()
 
+    def split_base_and_pm(self):
+        self.begin_operation('Creating progressive stream...')
+
+        base_tris = numpy.array(list(self.tris_left), dtype=numpy.int32)
+        tri_mapping = numpy.zeros(shape=(len(self.all_vert_indices),), dtype=numpy.int32)
+        tri_mapping[base_tris] = numpy.arange(len(self.tris_left), dtype=numpy.int32)
+        
+        cur_triangle = len(self.tris_left)
+        for operation in reversed(self.simplify_operations):
+            if operation[0] == STREAM_OP.INDEX_UPDATE:
+                op, changed_vert, changed_normal, changed_uv, update_list = operation
+                self.pmbuf.write("u ")
+                for tri_index, vert_index in update_list:
+                    self.pmbuf.write("%d %d" % (tri_mapping[tri_index], vert_index))
+                self.pmbuf.write("\n")
+                v = self.all_vertices[changed_vert]
+                n = self.all_normals[changed_normal]
+                u = self.new_uvs[changed_uv]
+                self.pmbuf.write("%.7g %.7g %.7g %.7g %.7g %.7g %.7g %.7g\n" % (v[0], v[1], v[2], n[0], n[1], n[2], u[0], u[1]))
+            elif operation[0] == STREAM_OP.TRIANGLE_ADDITION:
+                op, oldtri, vert_idx, norm_idx, uv_idx = operation
+                self.pmbuf.write("t\n")
+                vert = self.all_vertices[vert_idx]
+                norm = self.all_normals[norm_idx]
+                uv = self.new_uvs[uv_idx]
+                for v,n,u in zip(vert, norm, uv):
+                    self.pmbuf.write("%.7g %.7g %.7g %.7g %.7g %.7g %.7g %.7g\n" % (v[0], v[1], v[2], n[0], n[1], n[2], u[0], u[1]))
+                tri_mapping[oldtri] = cur_triangle
+                cur_triangle += 1
+            else:
+                assert(False)
+
+        self.end_operation()
+
+        self.begin_operation('Compressing base mesh...')
+        
+        #strip out unused indices
+        self.all_vert_indices = self.all_vert_indices[base_tris]
+        self.all_normal_indices = self.all_normal_indices[base_tris]
+        self.new_uv_indices = self.new_uv_indices[base_tris]
+
+        #compress verts
+        unique_vert_indices, mapping = numpy.unique(self.all_vert_indices, return_inverse=True)
+        mapping = numpy.cast['int32'](mapping)
+        mapping.shape = self.all_vert_indices.shape
+        self.all_vertices = self.all_vertices[unique_vert_indices]
+        self.all_vert_indices = mapping
+
+        #compress normals
+        unique_normal_indices, mapping = numpy.unique(self.all_normal_indices, return_inverse=True)
+        mapping = numpy.cast['int32'](mapping)
+        mapping.shape = self.all_normal_indices.shape
+        self.all_normals = self.all_normals[unique_normal_indices]
+        self.all_normal_indices = mapping
+        
+        #compress uvs
+        unique_uv_indices, mapping = numpy.unique(self.new_uv_indices, return_inverse=True)
+        mapping = numpy.cast['int32'](mapping)
+        mapping.shape = self.new_uv_indices.shape
+        self.new_uvs = self.new_uvs[unique_uv_indices]
+        self.new_uv_indices = mapping
+        
+        self.end_operation()
+
     def save_mesh(self):
         self.begin_operation('(Step 7 of 7) Saving mesh...')
         newmesh = collada.Collada()
@@ -1541,8 +1627,7 @@ class SanderSimplify(object):
         input_list.addInput(1, 'NORMAL', '#sander-normals-array')
         input_list.addInput(2, 'TEXCOORD', '#sander-uv-array')
         
-        tris_left = list(self.tris_left)
-        new_index = numpy.dstack((self.all_vert_indices[tris_left], self.all_normal_indices[tris_left], self.new_uv_indices[tris_left])).flatten()
+        new_index = numpy.dstack((self.all_vert_indices, self.all_normal_indices, self.new_uv_indices)).flatten()
         triset = geom.createTriangleSet(new_index, input_list, "materialref")
         geom.primitives.append(triset)
         newmesh.geometries.append(geom)
@@ -1554,9 +1639,8 @@ class SanderSimplify(object):
         myscene = collada.scene.Scene("myscene", [node])
         newmesh.scenes.append(myscene)
         newmesh.scene = myscene
-        savezip = meshtool.filters.factory.getInstance('save_collada_zip')
-        savezip.apply(newmesh, '/tmp/test.zip')
         self.end_operation()
+        return newmesh
 
     def simplify(self):
         self.uniqify_list()
@@ -1591,15 +1675,21 @@ class SanderSimplify(object):
         
         self.normalize_uvs()
         self.pack_charts()
-        self.save_mesh()
+        
+        self.split_base_and_pm()
+        
+        return self.save_mesh()
 
 def FilterGenerator():
     class SandlerSimplificationFilter(OpFilter):
         def __init__(self):
             super(SandlerSimplificationFilter, self).__init__('sander_simplify', 'Simplifies the mesh based on sandler, et al. method.')
-        def apply(self, mesh):
-            s = SanderSimplify(mesh)
-            s.simplify()
+            self.arguments.append(FileArgument('pm_file', 'Where to save the progressive mesh stream'))
+        def apply(self, mesh, pm_file):
+            pmout = open(pm_file, 'w')
+            s = SanderSimplify(mesh, pmout)
+            mesh = s.simplify()
+            pmout.close()
             return mesh
     return SandlerSimplificationFilter()
 from meshtool.filters import factory
