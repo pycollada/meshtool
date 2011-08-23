@@ -26,7 +26,7 @@ ImageFile.MAXBLOCK = 20*1024*1024 # default is 64k, setting to 20MB to handle la
 
 #Error threshold values, range 0-1
 MERGE_ERROR_THRESHOLD = 0.90
-SIMPLIFICATION_ERROR_THRESHOLD = 0.001
+SIMPLIFICATION_ERROR_THRESHOLD = 0.30
 
 def timer():
     begintime = datetime.datetime.now()
@@ -1277,7 +1277,7 @@ class SanderSimplify(object):
         
         dist3d_v1_v2 = v3dist(self.all_vertices[v1], self.all_vertices[v2])
         texture_stretches.append(dist3d_v1_v2)
-        texture_diff = max(texture_stretches) / self.maxdistance
+        texture_diff = max(texture_stretches)
         
         combined_A = self.vert_quadric_A[v1] + self.vert_quadric_A[v2]
         combined_b = self.vert_quadric_b[v1] + self.vert_quadric_b[v2]
@@ -1345,17 +1345,6 @@ class SanderSimplify(object):
             self.vert_quadric_A[v1] += A3
             self.vert_quadric_b[v1] += b3
             self.vert_quadric_c[v1] += c3
-
-        self.total_area = numpy.sum(area)
-        self.vert_quadric_A /= self.total_area
-        self.vert_quadric_b /= self.total_area
-        self.vert_quadric_c /= self.total_area
-
-        #calculate maximum distance in the mesh so we can also normalize texture stretch
-        minx, maxx = numpy.min(self.all_vertices[:,0]), numpy.max(self.all_vertices[:,0])
-        miny, maxy = numpy.min(self.all_vertices[:,1]), numpy.max(self.all_vertices[:,1])
-        minz, maxz = numpy.min(self.all_vertices[:,2]), numpy.max(self.all_vertices[:,2])
-        self.maxdistance = v3dist(numpy.array([minx, miny, minz], dtype=numpy.float32), numpy.array([maxx, maxy, maxz], dtype=numpy.float32))
 
         self.maxerror = 0
         
