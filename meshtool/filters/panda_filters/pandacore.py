@@ -140,44 +140,60 @@ def getVertexData(vertex, vertex_index, normal=None, normal_index=None,
                   texbinormalset=(), texbinormal_indexset=()):
     
     format = GeomVertexFormat()
-    formatArray = GeomVertexArrayFormat() 
+    formatArray = GeomVertexArrayFormat()
     
-    vertex_data = vertex[vertex_index]
-    vertex_data.shape = (-1, 3)
-    stacked = vertex_data
-    vertex_data = None
-    formatArray.addColumn(InternalName.make("vertex"), 3, Geom.NTFloat32, Geom.CPoint) 
-    
+    indices2stack = [vertex_index.reshape(-1, 1)]
+    alldata = [vertex]
+    formatArray.addColumn(InternalName.make("vertex"), 3, Geom.NTFloat32, Geom.CPoint)
     if normal is not None:
-        normal_data = normal[normal_index]
-        normal_data.shape = (-1, 3)
-        collada.util.normalize_v3(normal_data)
-        stacked = numpy.hstack((stacked, normal_data))
-        normal_data = None
+        indices2stack.append(normal_index.reshape(-1, 1))
+        alldata.append(collada.util.normalize_v3(numpy.copy(normal)))
         formatArray.addColumn(InternalName.make("normal"), 3, Geom.NTFloat32, Geom.CVector)
     if len(texcoordset) > 0:
-        texcoord_data = texcoordset[0][texcoord_indexset[0]]
-        texcoord_data.shape = (-1, 2)
-        stacked = numpy.hstack((stacked, texcoord_data))
-        texcoord_data = None
+        indices2stack.append(texcoord_indexset[0].reshape(-1, 1))
+        alldata.append(texcoordset[0])
         formatArray.addColumn(InternalName.make("texcoord"), 2, Geom.NTFloat32, Geom.CTexcoord)
     if len(textangentset) > 0:
-        textangent_data = textangentset[0][textangent_indexset[0]]
-        textangent_data.shape = (-1, 3)
-        stacked = numpy.hstack((stacked, textangent_data))
-        textangent_data = None
+        indices2stack.append(textangent_indexset[0].reshape(-1, 1))
+        alldata.append(textangentset[0])
         formatArray.addColumn(InternalName.make("tangent"), 3, Geom.NTFloat32, Geom.CVector)
     if len(texbinormalset) > 0:
-        texbinormal_data = texbinormalset[0][texbinormal_indexset[0]]
-        texbinormal_data.shape = (-1, 3)
-        stacked = numpy.hstack((stacked, texbinormal_data))
-        texbinormal_data = None
+        indices2stack.append(texbinormal_indexset[0].reshape(-1, 1))
+        alldata.append(texbinormalset[0])
         formatArray.addColumn(InternalName.make("binormal"), 3, Geom.NTFloat32, Geom.CVector)
+        
+    #have to flatten and reshape like this so that it's contiguous
+    stacked_indices = numpy.hstack(indices2stack).flatten().reshape((-1, len(indices2stack)))
 
-    stacked = stacked.flatten()
-    stacked.shape = (-1)
-    all_data = stacked.tostring()
-    stacked = None
+    #index_map - maps each unique value back to a location in the original array it came from
+    #   eg. stacked_indices[index_map] == unique_stacked_indices
+    #inverse_map - maps original array locations to their location in the unique array
+    #   e.g. unique_stacked_indices[inverse_map] == stacked_indices
+    unique_stacked_indices, index_map, inverse_map = numpy.unique(stacked_indices.view([('',stacked_indices.dtype)]*stacked_indices.shape[1]), return_index=True, return_inverse=True)
+    unique_stacked_indices = unique_stacked_indices.view(stacked_indices.dtype).reshape(-1,stacked_indices.shape[1])
+    
+    #unique returns as int64, so cast back
+    index_map = numpy.cast['int32'](index_map)
+    inverse_map = numpy.cast['int32'](inverse_map)
+    
+    #sort the index map to get a list of the index of the first time each value was encountered
+    sorted_map = numpy.cast['int32'](numpy.argsort(index_map))
+    
+    #since we're sorting the unique values, we have to map the inverse_map to the new index locations
+    backwards_map = numpy.zeros_like(sorted_map)
+    backwards_map[sorted_map] = numpy.arange(len(sorted_map), dtype=numpy.int32)
+    
+    #now this is the new unique values and their indices
+    unique_stacked_indices = unique_stacked_indices[sorted_map]
+    inverse_map = backwards_map[inverse_map]
+    
+    #combine the unique stacked indices into unique stacked data
+    data2stack = []
+    for idx, data in enumerate(alldata):
+        data2stack.append(data[unique_stacked_indices[:,idx]])
+    unique_stacked_data = numpy.hstack(data2stack).flatten()
+    unique_stacked_data.shape = (-1)
+    all_data = unique_stacked_data.tostring()
 
     format.addArray(formatArray)
     format = GeomVertexFormat.registerFormat(format)
@@ -190,8 +206,15 @@ def getVertexData(vertex, vertex_index, normal=None, normal_index=None,
     vdata.setArray(0, arr)
     datahandle = None
     arr = None
-    
-    return vdata
+
+    indexFormat = GeomVertexArrayFormat()
+    indexFormat.addColumn(InternalName.make("index"), 1, Geom.NTUint32, Geom.CIndex)
+    indexFormat = GeomVertexArrayFormat.registerFormat(indexFormat)
+    indexArray = GeomVertexArrayData(indexFormat, GeomEnums.UHStream)
+    indexHandle = indexArray.modifyHandle()
+    indexData = inverse_map.tostring()
+    indexHandle.setData(indexData)
+    return vdata, indexArray
 
 def getPrimAndDataFromTri(triset, matstate):
     if triset.normal is None:
@@ -208,14 +231,15 @@ def getPrimAndDataFromTri(triset, matstate):
             len(triset.texcoordset) > 0 and len(triset.textangentset) == 0:
         triset.generateTexTangentsAndBinormals()
 
-    vdata = getVertexData(triset.vertex, triset.vertex_index,
+    vdata, indexdata = getVertexData(triset.vertex, triset.vertex_index,
                           triset.normal, triset.normal_index,
                           triset.texcoordset, triset.texcoord_indexset,
                           triset.textangentset, triset.textangent_indexset,
                           triset.texbinormalset, triset.texbinormal_indexset)
 
     gprim = GeomTriangles(Geom.UHStatic)
-    gprim.addConsecutiveVertices(0, 3*triset.ntriangles)
+    gprim.setIndexType(Geom.NTUint32)
+    gprim.setVertices(indexdata)
     gprim.closePrimitive()
     
     return (vdata, gprim)
@@ -478,7 +502,7 @@ def destroyScene(render):
     base.graphicsEngine.removeAllWindows()
 
 def ensureCameraAt(nodePath, cam):
-    if nodePath.getNumChildren() > 0:
+    if not nodePath.isEmpty():
         boundingSphere = nodePath.getBounds()
         if not boundingSphere.isEmpty():
             scale = 500 / boundingSphere.getRadius()
@@ -500,9 +524,10 @@ def getGeomFromPrim(prim, matstate):
         triset = prim.triangleset()
         (vdata, gprim) = getPrimAndDataFromTri(triset, matstate)
     elif type(prim) is collada.lineset.LineSet:
-        vdata = getVertexData(prim.vertex, prim.vertex_index)           
+        vdata, indexdata = getVertexData(prim.vertex, prim.vertex_index)
         gprim = GeomLines(Geom.UHStatic)
-        gprim.addConsecutiveVertices(0, 2*prim.nlines)
+        gprim.setIndexType(Geom.NTUint32)
+        gprim.setVertices(indexdata)
         gprim.closePrimitive()
     else:
         raise Exception("Error: Unsupported primitive type. Exiting.")

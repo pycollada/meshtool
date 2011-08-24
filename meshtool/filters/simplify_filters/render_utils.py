@@ -5,9 +5,10 @@ def renderVerts(verts, idx):
     from panda3d.core import GeomTriangles, Geom, GeomNode
     from direct.showbase.ShowBase import ShowBase
     
-    vdata = getVertexData(verts, idx)
+    vdata, indexdata = getVertexData(verts, idx)
     gprim = GeomTriangles(Geom.UHStatic)
-    gprim.addConsecutiveVertices(0, 3*len(idx))
+    gprim.setIndexType(Geom.NTUint32)
+    gprim.setVertices(indexdata)
     gprim.closePrimitive()
     pgeom = Geom(vdata)
     pgeom.addPrimitive(gprim)
