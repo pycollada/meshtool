@@ -25,8 +25,8 @@ import bisect
 ImageFile.MAXBLOCK = 20*1024*1024 # default is 64k, setting to 20MB to handle large textures
 
 #Error threshold values, range 0-1
-MERGE_ERROR_THRESHOLD = 0.90
-SIMPLIFICATION_ERROR_THRESHOLD = 0.30
+MERGE_ERROR_THRESHOLD = 0.92
+SIMPLIFICATION_ERROR_THRESHOLD = 0.50
 
 def timer():
     begintime = datetime.datetime.now()
@@ -272,9 +272,11 @@ def quadricsForTriangles(tris):
    
     return (A, b, c, area, normal)
 
-def uniqify_multidim_indexes(sourcedata, indices):
+def uniqify_multidim_indexes(sourcedata, indices, return_map=False):
     unique_data, index_map = numpy.unique(sourcedata.view([('',sourcedata.dtype)]*sourcedata.shape[1]), return_inverse=True)
     index_map = numpy.cast['int32'](index_map)
+    if return_map:
+        return unique_data.view(sourcedata.dtype).reshape(-1,sourcedata.shape[1]), index_map[indices], index_map
     return unique_data.view(sourcedata.dtype).reshape(-1,sourcedata.shape[1]), index_map[indices]
 
 class STREAM_OP:
@@ -1177,9 +1179,10 @@ class SanderSimplify(object):
         #now resize the uvs according to chart size
         for face, facedata in self.facegraph.nodes_iter(data=True):
             relsize = self.facegraph.node[face]['chartsize']
-            toupdate = self.new_uv_indices[facedata['tris']]
-            self.new_uvs[toupdate, 0] *= relsize-0.5
-            self.new_uvs[toupdate, 1] *= relsize-0.5
+            chart_uvs = numpy.unique(self.new_uv_indices[facedata['tris']])
+            self.facegraph.node[face]['chart_uvs'] = chart_uvs
+            self.new_uvs[chart_uvs, 0] *= relsize-0.5
+            self.new_uvs[chart_uvs, 1] *= relsize-0.5
         
         self.end_operation()
 
@@ -1189,10 +1192,10 @@ class SanderSimplify(object):
         for face, facedata in self.facegraph.nodes_iter(data=True):
             relsize = self.facegraph.node[face]['chartsize']
             
-            toupdate = self.new_uv_indices[facedata['tris']]
+            chart_uvs = self.facegraph.node[face]['chart_uvs']
 
-            self.new_uvs[toupdate, 0] /= relsize-0.5
-            self.new_uvs[toupdate, 1] /= relsize-0.5
+            self.new_uvs[chart_uvs, 0] /= relsize-0.5
+            self.new_uvs[chart_uvs, 1] /= relsize-0.5
         
         self.end_operation()
 
@@ -1267,12 +1270,14 @@ class SanderSimplify(object):
 
                     #convert the u,v intersection to 3d for the degenerate edge
                     degen_uv_dist = v2dist(degen_uv[0], degen_uv[1])
+                    if degen_uv_dist <= 0: continue
                     degen_intersect_relative = v2dist(degen_uv[0], intersect_uv) / degen_uv_dist
                     degen_v3_diff = degen_3d[1] - degen_3d[0]
                     degen_v3_intersect = degen_3d[0] + degen_v3_diff * degen_intersect_relative
                     
                     #and then to 3d for the moving edge
                     moving_uv_dist = v2dist(moving_uv, v1_pt)
+                    if moving_uv_dist <= 0: continue
                     moving_intersect_relative = v2dist(moving_uv, intersect_uv) / moving_uv_dist
                     moving_v3_diff = v1_3d - moving_3d
                     moving_v3_intersect = moving_3d + moving_v3_diff * moving_intersect_relative
@@ -1303,6 +1308,7 @@ class SanderSimplify(object):
             facev2uv = self.facegraph.node[face]['vert2uvidx']
             for tri in facedata['tris']:
                 self.tri2face[tri] = face
+            self.facegraph.node[face]['orig_tris'] = facedata['tris']
 
         self.vertexgraph.add_nodes_from(( (i, {'tris':set()}) for i in xrange(len(self.all_vertices))))
         for i, (v1,v2,v3) in enumerate(self.all_vert_indices):
@@ -1414,7 +1420,6 @@ class SanderSimplify(object):
                     self.simplify_operations.append((STREAM_OP.TRIANGLE_ADDITION, t2, t2_idx, self.all_normal_indices[t2], self.new_uv_indices[t2]))
             
             new_contractions = set()
-            stream_updates = {}
             for t2, t2_idx in izip(v2tris, v2tri_idx):
                 if v1 not in t2_idx:
                     #these are triangles that have a vertex moving from v2 to v1
@@ -1448,20 +1453,14 @@ class SanderSimplify(object):
                     prev_normal_value = self.all_normal_indices[t2][where_v2]
                     self.all_normal_indices[t2][where_v2] = self.all_normal_indices[copy_tri_v1][where_v1]
                     
-                    updated_set = (prev_vertex_value, prev_normal_value, prev_uv_value)
-                    update_list = stream_updates.get(updated_set, [])
-                    update_list.append((t2, where_v2))
-                    stream_updates[updated_set] = update_list
+                    self.simplify_operations.append((STREAM_OP.INDEX_UPDATE, t2, where_v2, prev_vertex_value, prev_normal_value, prev_uv_value))
                     
                     #add new candidate merges
                     new_contractions.add((t2_idx[other1], v1))
                     new_contractions.add((t2_idx[other2], v1))
                     new_contractions.add((v1, t2_idx[other1]))
                     new_contractions.add((v1, t2_idx[other2]))
-            
-            for (prev_vertex_value, prev_normal_value, prev_uv_value), update_list in stream_updates.iteritems():
-                self.simplify_operations.append((STREAM_OP.INDEX_UPDATE, prev_vertex_value, prev_normal_value, prev_uv_value, update_list))
-            
+
             #remove the degenerate triangle from the triangle list of other vertices in the triangle
             for tri in degenerate:
                 for v in self.all_vert_indices[tri]:
@@ -1507,12 +1506,15 @@ class SanderSimplify(object):
             atlasmask.paste(self.chart_masks[face], (x,y,x+w,y+h))
             x,y,w,h,width,height = (float(i) for i in (x,y,w,h,self.chart_packing.width,self.chart_packing.height))
     
-            chart_tris = [f for f in self.facegraph.node[face]['tris'] if f in self.tris_left]
-            chart_idx = numpy.unique(self.new_uv_indices[chart_tris])
+            chart_tris = [f for f in self.facegraph.node[face]['orig_tris'] if f in self.tris_left]
+            chart_uvs = self.facegraph.node[face]['chart_uvs']
     
             #this rescales the texcoords to map to the new atlas location
-            self.new_uvs[chart_idx,0] = (self.new_uvs[chart_idx,0] * (w-0.5) + x) / width
-            self.new_uvs[chart_idx,1] = 1.0 - (( (1.0-self.new_uvs[chart_idx,1]) * (h-0.5) + y ) / height)
+            self.new_uvs[chart_uvs,0] = (self.new_uvs[chart_uvs,0] * (w-0.5) + x) / width
+            self.new_uvs[chart_uvs,1] = 1.0 - (( (1.0-self.new_uvs[chart_uvs,1]) * (h-0.5) + y ) / height)
+
+        #now that we are finished setting the uvs, we can uniqify it
+        self.new_uvs, self.new_uv_indices, self.old2newuvmap = uniqify_multidim_indexes(self.new_uvs, self.new_uv_indices, return_map=True)
 
         docvfill = True
         try: import cv
@@ -1536,66 +1538,105 @@ class SanderSimplify(object):
         self.end_operation()
 
     def split_base_and_pm(self):
+        
         self.begin_operation('Creating progressive stream...')
-
+        
         base_tris = numpy.array(list(self.tris_left), dtype=numpy.int32)
         tri_mapping = numpy.zeros(shape=(len(self.all_vert_indices),), dtype=numpy.int32)
         tri_mapping[base_tris] = numpy.arange(len(self.tris_left), dtype=numpy.int32)
-        
-        cur_triangle = len(self.tris_left)
-        for operation in reversed(self.simplify_operations):
-            if operation[0] == STREAM_OP.INDEX_UPDATE:
-                op, changed_vert, changed_normal, changed_uv, update_list = operation
-                self.pmbuf.write("u ")
-                for tri_index, vert_index in update_list:
-                    self.pmbuf.write("%d %d" % (tri_mapping[tri_index], vert_index))
-                self.pmbuf.write("\n")
-                v = self.all_vertices[changed_vert]
-                n = self.all_normals[changed_normal]
-                u = self.new_uvs[changed_uv]
-                self.pmbuf.write("%.7g %.7g %.7g %.7g %.7g %.7g %.7g %.7g\n" % (v[0], v[1], v[2], n[0], n[1], n[2], u[0], u[1]))
-            elif operation[0] == STREAM_OP.TRIANGLE_ADDITION:
-                op, oldtri, vert_idx, norm_idx, uv_idx = operation
-                self.pmbuf.write("t\n")
-                vert = self.all_vertices[vert_idx]
-                norm = self.all_normals[norm_idx]
-                uv = self.new_uvs[uv_idx]
-                for v,n,u in zip(vert, norm, uv):
-                    self.pmbuf.write("%.7g %.7g %.7g %.7g %.7g %.7g %.7g %.7g\n" % (v[0], v[1], v[2], n[0], n[1], n[2], u[0], u[1]))
-                tri_mapping[oldtri] = cur_triangle
-                cur_triangle += 1
-            else:
-                assert(False)
-
-        self.end_operation()
-
-        self.begin_operation('Compressing base mesh...')
         
         #strip out unused indices
         self.all_vert_indices = self.all_vert_indices[base_tris]
         self.all_normal_indices = self.all_normal_indices[base_tris]
         self.new_uv_indices = self.new_uv_indices[base_tris]
 
+        #have to flatten and reshape like this so that it's contiguous
+        stacked_indices = numpy.hstack((self.all_vert_indices.reshape(-1, 1),
+                                        self.all_normal_indices.reshape(-1, 1),
+                                        self.new_uv_indices.reshape(-1, 1))).flatten().reshape((-1, 3))
+        
+        #index_map - maps each unique value back to a location in the original array it came from
+        #   eg. stacked_indices[index_map] == unique_stacked_indices
+        #new_tris - maps original array locations to their location in the unique array
+        #   e.g. unique_stacked_indices[new_tris] == stacked_indices
+        unique_stacked_indices, index_map, new_tris = numpy.unique(stacked_indices.view([('',stacked_indices.dtype)]*stacked_indices.shape[1]), return_index=True, return_inverse=True)
+        unique_stacked_indices = unique_stacked_indices.view(stacked_indices.dtype).reshape(-1,stacked_indices.shape[1])
+        
+        #unique returns as int64, so cast back
+        index_map = numpy.cast['int32'](index_map)
+        new_tris = numpy.cast['int32'](new_tris)
+        
+        #sort the index map to get a list of the index of the first time each value was encountered
+        sorted_map = numpy.cast['int32'](numpy.argsort(index_map))
+        
+        #since we're sorting the unique values, we have to map the new_tris to the new index locations
+        backwards_map = numpy.zeros_like(sorted_map)
+        backwards_map[sorted_map] = numpy.arange(len(sorted_map), dtype=numpy.int32)
+        
+        #now this is the new unique values and their indices
+        unique_stacked_indices = unique_stacked_indices[sorted_map]
+        new_tris = backwards_map[new_tris]
+        new_tris.shape = (-1, 3)
+        
+        oldindex2newindex = {}
+        for i, oldset in enumerate(unique_stacked_indices):
+            oldindex2newindex[tuple(oldset)] = i 
+        
+        print 'num unique vert data locs in base mesh', len(unique_stacked_indices)
+        print 'num triangles in base mesh', len(self.tris_left)
+        cur_triangle = len(self.tris_left)
+        for operation in reversed(self.simplify_operations):
+            if operation[0] == STREAM_OP.INDEX_UPDATE:
+                op, tri_index, vert_index, changed_vert, changed_normal, changed_uv = operation
+                changed_uv = self.old2newuvmap[changed_uv]
+                #print 'index update', tri_index, vert_index, changed_vert, changed_normal, changed_uv
+                
+                new_tri_index = tri_mapping[tri_index]
+                unique_old_index = (changed_vert, changed_normal, changed_uv)
+                if unique_old_index not in oldindex2newindex:
+                    v = self.all_vertices[changed_vert]
+                    n = self.all_normals[changed_normal]
+                    u = self.new_uvs[changed_uv]
+                    self.pmbuf.write("v %.7g %.7g %.7g %.7g %.7g %.7g %.7g %.7g\n" % (v[0], v[1], v[2], n[0], n[1], n[2], u[0], u[1]))
+                    oldindex2newindex[unique_old_index] = len(oldindex2newindex)
+                self.pmbuf.write("u %d %d\n" % (new_tri_index*3 + vert_index, oldindex2newindex[unique_old_index]))
+                
+            elif operation[0] == STREAM_OP.TRIANGLE_ADDITION:
+                op, oldtri, vert_idx, norm_idx, uv_idx = operation
+                uv_idx = [self.old2newuvmap[uv_idx[0]], self.old2newuvmap[uv_idx[1]], self.old2newuvmap[uv_idx[2]]]
+                #print 'newtri', oldtri, vert_idx, norm_idx, uv_idx
+                
+                newtri = []
+                for pt in ((vert_idx[0], norm_idx[0], uv_idx[0]),
+                           (vert_idx[1], norm_idx[1], uv_idx[1]),
+                           (vert_idx[2], norm_idx[2], uv_idx[2])):
+                    if pt in oldindex2newindex:
+                        newtri.append(oldindex2newindex[pt])
+                    else:
+                        v = self.all_vertices[pt[0]]
+                        n = self.all_normals[pt[1]]
+                        u = self.new_uvs[pt[2]]
+                        self.pmbuf.write("v %.7g %.7g %.7g %.7g %.7g %.7g %.7g %.7g\n" % (v[0], v[1], v[2], n[0], n[1], n[2], u[0], u[1]))
+                        newtri.append(len(oldindex2newindex))
+                        oldindex2newindex[pt] = len(oldindex2newindex)
+                self.pmbuf.write("t %d %d %d\n" % (newtri[0], newtri[1], newtri[2]))
+                tri_mapping[oldtri] = cur_triangle
+                cur_triangle += 1
+            else:
+                assert(False)
+        
+        self.end_operation()
+        
+        self.begin_operation('Compressing base mesh...')
+
         #compress verts
-        unique_vert_indices, mapping = numpy.unique(self.all_vert_indices, return_inverse=True)
-        mapping = numpy.cast['int32'](mapping)
-        mapping.shape = self.all_vert_indices.shape
-        self.all_vertices = self.all_vertices[unique_vert_indices]
-        self.all_vert_indices = mapping
+        self.all_vertices, self.all_vert_indices = uniqify_multidim_indexes(self.all_vertices, self.all_vert_indices)
 
         #compress normals
-        unique_normal_indices, mapping = numpy.unique(self.all_normal_indices, return_inverse=True)
-        mapping = numpy.cast['int32'](mapping)
-        mapping.shape = self.all_normal_indices.shape
-        self.all_normals = self.all_normals[unique_normal_indices]
-        self.all_normal_indices = mapping
+        self.all_normals, self.all_normal_indices = uniqify_multidim_indexes(self.all_normals, self.all_normal_indices)
         
         #compress uvs
-        unique_uv_indices, mapping = numpy.unique(self.new_uv_indices, return_inverse=True)
-        mapping = numpy.cast['int32'](mapping)
-        mapping.shape = self.new_uv_indices.shape
-        self.new_uvs = self.new_uvs[unique_uv_indices]
-        self.new_uv_indices = mapping
+        self.new_uvs, self.new_uv_indices = uniqify_multidim_indexes(self.new_uvs, self.new_uv_indices)
         
         self.end_operation()
 
