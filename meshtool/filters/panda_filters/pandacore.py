@@ -173,15 +173,15 @@ def getVertexData(vertex, vertex_index, normal=None, normal_index=None,
     unique_stacked_indices = unique_stacked_indices.view(stacked_indices.dtype).reshape(-1,stacked_indices.shape[1])
     
     #unique returns as int64, so cast back
-    index_map = numpy.cast['int32'](index_map)
-    inverse_map = numpy.cast['int32'](inverse_map)
+    index_map = numpy.cast['uint32'](index_map)
+    inverse_map = numpy.cast['uint32'](inverse_map)
     
     #sort the index map to get a list of the index of the first time each value was encountered
-    sorted_map = numpy.cast['int32'](numpy.argsort(index_map))
+    sorted_map = numpy.cast['uint32'](numpy.argsort(index_map))
     
     #since we're sorting the unique values, we have to map the inverse_map to the new index locations
     backwards_map = numpy.zeros_like(sorted_map)
-    backwards_map[sorted_map] = numpy.arange(len(sorted_map), dtype=numpy.int32)
+    backwards_map[sorted_map] = numpy.arange(len(sorted_map), dtype=numpy.uint32)
     
     #now this is the new unique values and their indices
     unique_stacked_indices = unique_stacked_indices[sorted_map]
