@@ -1032,6 +1032,12 @@ class SanderSimplify(object):
         self.begin_operation('(Step 2 of 7) Optimizing chart parameterizations...')
         total_L2 = 0
         for (face, facedata) in self.facegraph.nodes_iter(data=True):
+            
+            if facedata['diffuse'] is not None:
+                self.facegraph.node[face]['L2'] = chart_L2
+                self.new_uvs[self.new_uv_indices[facedata['tris']]] = 0.5
+                continue
+            
             border_edges = facedata['edges']
             newvert2idx = self.facegraph.node[face]['vert2uvidx']
             chart_tris = self.all_vert_indices[facedata['tris']]
@@ -1146,19 +1152,34 @@ class SanderSimplify(object):
         self.begin_operation('(Step 3 of 7) Creating and resizing charts...')
 
         self.material2color = {}
-        for i, mat in self.tri2material:
+        total_texture_area = 0.0
+        for matnum, (i, mat) in enumerate(self.tri2material):
             if mat not in self.material2color:
                 if isinstance(mat.effect.diffuse, tuple):
                     self.material2color[mat] = mat.effect.diffuse
                 else:
                     self.material2color[mat] = mat.effect.diffuse.sampler.surface.image.pilimage
+            if not isinstance(mat.effect.diffuse, tuple):
+                if matnum < len(self.tri2material) - 1:
+                    end_range = self.tri2material[matnum+1][0]
+                else:
+                    end_range = len(self.all_orig_uv_indices)
+                tri_uvs = self.all_orig_uvs[self.all_orig_uv_indices[i:end_range]]
+                tri_uvs[:,:,0] *= self.material2color[mat].size[0]
+                tri_uvs[:,:,1] *= self.material2color[mat].size[1]
+                total_texture_area += numpy.sum(numpy.abs(tri_areas_2d(tri_uvs)))
 
-        TEXTURE_DIMENSION = 1024
+        TEXTURE_DIMENSION = min(math.sqrt(total_texture_area), 2048.0)
         TEXTURE_SIZE = TEXTURE_DIMENSION * TEXTURE_DIMENSION
-        rp = RectPack(TEXTURE_DIMENSION*2, TEXTURE_DIMENSION*2)
+        
+        rp = RectPack()
         self.chart_ims = {}
         self.chart_masks = {}
         for face, facedata in self.facegraph.nodes_iter(data=True):
+            
+            if facedata['diffuse'] is not None:
+                continue
+            
             relsize = int(math.sqrt((facedata['L2'] / self.total_L2) * TEXTURE_SIZE))
             if relsize < 4: relsize = 4
             
@@ -1200,14 +1221,45 @@ class SanderSimplify(object):
             self.chart_masks[face] = chartmask
 
             rp.addRectangle(face, relsize+2, relsize+2)
+        
         assert(rp.pack())
+        
+        #find size for color charts so that they are still visible at 128x128 mipmap
+        mintexsize = min(rp.width, rp.height)
+        colorsize = max((mintexsize / 128.0), 8.0)
+        #round up to power of 2, with 2 pixel border
+        colorsize = int(math.pow(2, math.ceil(math.log(colorsize, 2)))) - 2
+        
+        self.color2chart = {}
+        self.color2faces = {}
+        for face, facedata in self.facegraph.nodes_iter(data=True):
+            if facedata['diffuse'] is None: continue
+            
+            if facedata['diffuse'] not in self.color2chart:
+                color = facedata['diffuse']
+                color = (int(color[0]*255), int(color[1]*255), int(color[2]*255))
+                chartim = Image.new('RGB', (colorsize, colorsize), color)
+                chartmask = Image.new('L', (colorsize, colorsize), 0)
+                self.color2chart[facedata['diffuse']] = (chartim, chartmask)
+                self.color2faces[facedata['diffuse']] = [face]
+                rp.addRectangle(facedata['diffuse'], colorsize+2, colorsize+2)
+                self.chart_ims[facedata['diffuse']] = chartim
+                self.chart_masks[facedata['diffuse']] = chartmask
+            else:
+                self.color2faces[facedata['diffuse']].append(face)
+            
+        assert(rp.pack())
+
         self.chart_packing = rp
         
         #now resize the uvs according to chart size
         for face, facedata in self.facegraph.nodes_iter(data=True):
-            relsize = self.facegraph.node[face]['chartsize']
             chart_uvs = numpy.unique(self.new_uv_indices[facedata['tris']])
             self.facegraph.node[face]['chart_uvs'] = chart_uvs
+            
+            if facedata['diffuse'] is not None: continue
+            
+            relsize = self.facegraph.node[face]['chartsize']
             self.new_uvs[chart_uvs, 0] *= relsize-0.5
             self.new_uvs[chart_uvs, 1] *= relsize-0.5
         
@@ -1217,6 +1269,8 @@ class SanderSimplify(object):
         self.begin_operation('Normalizing texture coordinates...')
 
         for face, facedata in self.facegraph.nodes_iter(data=True):
+            if facedata['diffuse'] is not None: continue
+            
             relsize = self.facegraph.node[face]['chartsize']
             
             chart_uvs = self.facegraph.node[face]['chart_uvs']
@@ -1247,6 +1301,11 @@ class SanderSimplify(object):
             if v1 in t2_idx:
                 degenerate.add(t2)
                 facefrom = self.tri2face[t2]
+                
+                #texture stretch for color-only face is 0
+                if self.facegraph.node[facefrom]['diffuse'] is not None:
+                    continue
+                
                 face_vert2uvidx = self.facegraph.node[facefrom]['vert2uvidx']
                 other_vert = [v for v in t2_idx if v != v1 and v != v2][0]
                 degen_3d = (self.all_vertices[other_vert], self.all_vertices[v2])
@@ -1258,6 +1317,11 @@ class SanderSimplify(object):
         texture_stretches = []
         for moved_tri_idx in moved:
             facefrom = self.tri2face[moved_tri_idx]
+            
+            #texture stretch for color-only face is 0
+            if self.facegraph.node[facefrom]['diffuse'] is not None:
+                continue
+            
             face_vert2uvidx = self.facegraph.node[facefrom]['vert2uvidx']
             
             moved_vert_idx = self.all_vert_indices[moved_tri_idx]
@@ -1520,9 +1584,9 @@ class SanderSimplify(object):
         self.begin_operation('(Step 6 of 7) Creating and packing charts into atlas...')
         self.atlasimg = Image.new('RGB', (self.chart_packing.width, self.chart_packing.height))
         atlasmask = Image.new('L', (self.chart_packing.width, self.chart_packing.height), 255)
-        for face, chartim in self.chart_ims.iteritems():
+        for face_or_color, chartim in self.chart_ims.iteritems():
             
-            x,y,w,h = self.chart_packing.getPlacement(face)
+            x,y,w,h = self.chart_packing.getPlacement(face_or_color)
             #adjust for 1 pixel border
             x += 1
             y += 1
@@ -1530,11 +1594,21 @@ class SanderSimplify(object):
             h -= 2
             
             self.atlasimg.paste(chartim, (x,y,x+w,y+h))
-            atlasmask.paste(self.chart_masks[face], (x,y,x+w,y+h))
+            atlasmask.paste(self.chart_masks[face_or_color], (x,y,x+w,y+h))
             x,y,w,h,width,height = (float(i) for i in (x,y,w,h,self.chart_packing.width,self.chart_packing.height))
-    
-            chart_tris = [f for f in self.facegraph.node[face]['orig_tris'] if f in self.tris_left]
-            chart_uvs = self.facegraph.node[face]['chart_uvs']
+            
+            faces_to_get = []
+            if isinstance(face_or_color, tuple):
+                faces_to_get = self.color2faces[face_or_color]
+            else:
+                faces_to_get.append(face_or_color)
+            
+            chart_tris = []
+            chart_uvs = []
+            for face in faces_to_get:
+                chart_tris.extend(f for f in self.facegraph.node[face]['orig_tris'] if f in self.tris_left)
+                chart_uvs.extend(self.facegraph.node[face]['chart_uvs'])
+            chart_uvs = numpy.unique(chart_uvs)
     
             #this rescales the texcoords to map to the new atlas location
             self.new_uvs[chart_uvs,0] = (self.new_uvs[chart_uvs,0] * (w-0.5) + x) / width
