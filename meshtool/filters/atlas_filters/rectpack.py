@@ -146,9 +146,11 @@ class RectPack:
                 while height + miny > next_height:
                     next_height *= 2
 
-                if (next_width - width < next_height - height or height >= self.maxheight) and next_width <= self.maxwidth:
+                if (next_width - width < next_height - height or self.maxheight and height >= self.maxheight) and \
+                        (self.maxwidth is None or next_width <= self.maxwidth):
                     width = next_width
-                elif (next_height - height <= next_width - width or width >= self.maxwidth) and next_height <= self.maxheight:
+                elif (next_height - height <= next_width - width or self.maxwidth and width >= self.maxwidth) and \
+                        (self.maxheight is None or next_height <= self.maxheight):
                     height = next_height
                 if width < minx:
                     width = next_width
