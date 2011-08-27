@@ -403,7 +403,7 @@ class SanderSimplify(object):
     def build_face_graph(self):
         self.begin_operation('Building face graph...')
         facegraph = nx.Graph()
-        facegraph.add_nodes_from(( (i, {'tris':[i], 
+        facegraph.add_nodes_from(( (i, {'tris': [i],
                                         'edges':set([tuple(sorted([tri[0], tri[1]])),
                                                      tuple(sorted([tri[1], tri[2]])),
                                                      tuple(sorted([tri[0], tri[2]]))])})
@@ -444,6 +444,22 @@ class SanderSimplify(object):
             if numadded > 2:
                 #edge is adjacent to more than two faces, so don't merge it
                 self.invalid_edges.add(tuple(sorted([v1, v2])))
+        
+        #store diffuse color of each face, or None for textures
+        # this will be used to constrain the chart merging so that color-only
+        # faces don't get merged with textured faces
+        for matnum, (tri_index, mat) in enumerate(self.tri2material):
+            if matnum < len(self.tri2material) - 1:
+                end_range = self.tri2material[matnum+1][0]
+            else:
+                end_range = len(self.all_vert_indices)
+            
+            if isinstance(mat.effect.diffuse, tuple):
+                diffuse = mat.effect.diffuse
+            else:
+                diffuse = None
+            for i in xrange(tri_index, end_range):
+                facegraph.node[i]['diffuse'] = diffuse
                 
         self.facegraph = facegraph
         
@@ -455,6 +471,8 @@ class SanderSimplify(object):
         
         self.begin_operation('(Step 1 of 7) Creating priority queue for initial merges...')
         for v1, v2 in self.facegraph.edges_iter():
+            if self.facegraph.node[v1]['diffuse'] != self.facegraph.node[v2]['diffuse']:
+                continue
             edges1 = self.facegraph.node[v1]['edges']
             edges2 = self.facegraph.node[v2]['edges']
             merged = numpy.array(list(edges1.symmetric_difference(edges2)))
@@ -597,7 +615,8 @@ class SanderSimplify(object):
             edges_to_add = [e for e in edges_to_add if (e[1] in valid_neighbors)]
             
             combined_tris = self.facegraph.node[face1]['tris'] + self.facegraph.node[face2]['tris']
-            self.facegraph.add_node(newface, tris=combined_tris, edges=combined_edges)        
+            diffuse = self.facegraph.node[face1]['diffuse']
+            self.facegraph.add_node(newface, tris=combined_tris, edges=combined_edges, diffuse=diffuse)        
             self.facegraph.add_edges_from(edges_to_add)
             
             adj_faces = set(self.facegraph.neighbors(face1))
@@ -605,6 +624,7 @@ class SanderSimplify(object):
             adj_faces.remove(face1)
             adj_faces.remove(face2)
             for otherface in adj_faces:
+                if self.facegraph.node[otherface]['diffuse'] != diffuse: continue
                 otheredges = self.facegraph.node[otherface]['edges']
                 merged = numpy.array(list(combined_edges.symmetric_difference(otheredges)))
                 if len(merged) > 0:
@@ -697,6 +717,10 @@ class SanderSimplify(object):
     def straighten_chart_boundaries(self):
         self.begin_operation('(Step 1 of 7) Straightening chart boundaries...')
         for (face1, face2) in self.facegraph.edges_iter():
+            
+            #can't straigten if differing diffuse source (color vs texture)
+            if self.facegraph.node[face1]['diffuse'] != self.facegraph.node[face2]['diffuse']:
+                continue
             
             #can't straighten the border of a single triangle
             tris1 = self.facegraph.node[face1]['tris']
@@ -1155,7 +1179,10 @@ class SanderSimplify(object):
                 newtri = [(newu[0], newv[0]), (newu[1], newv[1]), (newu[2], newv[2])]
                 maskdraw.polygon(newtri, fill=0, outline=0)
                 
-                diffuse_source = self.material2color[self.tri2material[bisect.bisect(self.tri2material, (tri,0)) - 1][1]]
+                bisect_loc = bisect.bisect(self.tri2material, (tri,0))
+                if bisect_loc >= len(self.tri2material) or tri != self.tri2material[bisect_loc][0]:
+                    bisect_loc -= 1
+                diffuse_source = self.material2color[self.tri2material[bisect_loc][1]]
                 if isinstance(diffuse_source, tuple):
                     color = (int(diffuse_source[0]*255), int(diffuse_source[1]*255), int(diffuse_source[2]*255))
                     chartdraw.polygon(newtri, fill=color, outline=color)
