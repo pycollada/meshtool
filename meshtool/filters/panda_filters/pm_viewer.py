@@ -119,11 +119,15 @@ class PandaPmViewer:
                 indexrewriter.addData1i(vals[2])
                 indexrewriter.addData1i(vals[3])
             elif op == PM_OP.INDEX_UPDATE:
+                #TODO: ugly workaround for p3d 1.7 bug, change to below for 1.8
                 indexreader = GeomVertexReader(indexdata)
                 indexreader.setColumn(0)
                 indexreader.setRow(vals[1])
                 oldval = indexreader.getData1i()
                 del indexreader
+                
+                #indexrewriter.setRow(vals[1])
+                #oldval = indexrewriter.getData1i()
                 
                 indexrewriter.setRow(vals[1])
                 indexrewriter.setData1i(vals[2])
@@ -143,11 +147,15 @@ class PandaPmViewer:
             if op == PM_OP.TRIANGLE_ADDITION:
                 nextTriangleIndex -= 3
             elif op == PM_OP.INDEX_UPDATE:
+                #TODO: ugly workaround for p3d 1.7 bug, change to below for 1.8
                 indexreader = GeomVertexReader(indexdata)
                 indexreader.setColumn(0)
                 indexreader.setRow(vals[1])
                 oldval = indexreader.getData1i()
                 del indexreader
+                
+                #indexrewriter.setRow(vals[1])
+                #oldval = indexrewriter.getData1i()
                 
                 indexrewriter.setRow(vals[1])
                 indexrewriter.setData1i(vals[2])
