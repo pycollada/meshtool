@@ -1034,7 +1034,7 @@ class SanderSimplify(object):
         for (face, facedata) in self.facegraph.nodes_iter(data=True):
             
             if facedata['diffuse'] is not None:
-                self.facegraph.node[face]['L2'] = chart_L2
+                self.facegraph.node[face]['L2'] = 0
                 self.new_uvs[self.new_uv_indices[facedata['tris']]] = 0.5
                 continue
             
