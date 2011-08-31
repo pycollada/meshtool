@@ -25,8 +25,8 @@ import bisect
 ImageFile.MAXBLOCK = 20*1024*1024 # default is 64k, setting to 20MB to handle large textures
 
 #Error threshold values, range 0-1
-MERGE_ERROR_THRESHOLD = 0.92
-SIMPLIFICATION_ERROR_THRESHOLD = 0.50
+MERGE_ERROR_THRESHOLD = 0.91
+SIMPLIFICATION_ERROR_THRESHOLD = 0.90
 
 def timer():
     begintime = datetime.datetime.now()
@@ -166,9 +166,12 @@ def stretch_metric(t3d, t2d, return_A2d=False, flippedCheck=None, normalize=Fals
         L2[A2d == 0] = numpy.inf
     if normalize:
         A3d = tri_areas_3d(t3d)
-        copyL2 = L2
         A2d[A2d == numpy.inf] = 0
-        L2 = numpy.sqrt(numpy.sum(L2*L2*A3d) / numpy.sum(A3d)) * numpy.sqrt(numpy.sum(numpy.abs(A2d)) / numpy.sum(A3d))
+        sumA3d = numpy.sum(A3d)
+        if flippedCheck is None and sumA3d == 0:
+            L2 = 0
+        else:
+            L2 = numpy.sqrt(numpy.sum(L2*L2*A3d) / sumA3d) * numpy.sqrt(numpy.sum(numpy.abs(A2d)) / sumA3d)
         
     if return_A2d:
         return L2, A2d
@@ -320,9 +323,43 @@ class SanderSimplify(object):
                 self.normal_offset += len(boundprim.normal)
                 
                 if boundprim.texcoordset and len(boundprim.texcoordset) > 0:
-                    self.all_orig_uvs.append(boundprim.texcoordset[0])
-                    self.all_orig_uv_indices.append(boundprim.texcoord_indexset[0] + self.uv_offset)
-                    self.uv_offset += len(boundprim.texcoordset[0])
+                    
+                    texsource = boundprim.texcoordset[0]
+                    texindex = boundprim.texcoord_indexset[0]
+                    texarray = texsource[texindex]
+                    
+                    if numpy.min(texarray) < 0.0 or numpy.max(texarray) > 1.0:
+                    
+                        # Calculate the min x value and min y value for each triangle
+                        # then take the floor of the min and subtract that value
+                        # from each triangle. This makes each triangle's texcoords
+                        # as close to 0 as possible without changing their effect
+                        x1 = texarray[:,0,0]
+                        x2 = texarray[:,1,0]
+                        x3 = texarray[:,2,0]
+                        y1 = texarray[:,0,1]
+                        y2 = texarray[:,1,1]
+                        y3 = texarray[:,2,1]
+                        
+                        xmin = numpy.minimum(x1, numpy.minimum(x2, x3))
+                        ymin = numpy.minimum(y1, numpy.minimum(y2, y3))
+                        
+                        xfloor = numpy.floor(xmin)
+                        yfloor = numpy.floor(ymin)
+                        
+                        texarray[:,:,0] -= xfloor[:, numpy.newaxis]
+                        texarray[:,:,1] -= yfloor[:, numpy.newaxis]
+                        
+                        texarray.shape = (-1, 2)
+                        texsource = texarray
+                        texindex = numpy.arange(len(texindex)*3)
+                        texindex.shape = (-1, 3)
+                        
+                        texsource, texindex = uniqify_multidim_indexes(texsource, texindex)
+                    
+                    self.all_orig_uvs.append(texsource)
+                    self.all_orig_uv_indices.append(texindex + self.uv_offset)
+                    self.uv_offset += len(texsource)
                 else:
                     self.all_orig_uv_indices.append(numpy.zeros(shape=(len(boundprim.index), 3), dtype=numpy.int32))
                 
@@ -1152,29 +1189,35 @@ class SanderSimplify(object):
         self.begin_operation('(Step 3 of 7) Creating and resizing charts...')
 
         self.material2color = {}
-        total_texture_area = 0.0
+        tri_areas = []
         for matnum, (i, mat) in enumerate(self.tri2material):
+            if matnum < len(self.tri2material) - 1:
+                end_range = self.tri2material[matnum+1][0]
+            else:
+                end_range = len(self.all_orig_uv_indices)
+            
             if mat not in self.material2color:
                 if isinstance(mat.effect.diffuse, tuple):
                     self.material2color[mat] = mat.effect.diffuse
                 else:
                     self.material2color[mat] = mat.effect.diffuse.sampler.surface.image.pilimage
+                    
             if not isinstance(mat.effect.diffuse, tuple):
-                if matnum < len(self.tri2material) - 1:
-                    end_range = self.tri2material[matnum+1][0]
-                else:
-                    end_range = len(self.all_orig_uv_indices)
                 tri_uvs = self.all_orig_uvs[self.all_orig_uv_indices[i:end_range]]
                 tri_uvs[:,:,0] *= self.material2color[mat].size[0]
                 tri_uvs[:,:,1] *= self.material2color[mat].size[1]
-                total_texture_area += numpy.sum(numpy.abs(tri_areas_2d(tri_uvs)))
+                areas_2d = numpy.abs(tri_areas_2d(tri_uvs))
+                tri_areas.append(areas_2d)
+            else:
+                tri_areas.append(numpy.zeros(end_range-i+1, dtype=numpy.int32))
+        
+        if len(tri_areas) > 0:
+            tri_areas = numpy.concatenate(tri_areas)
+        total_texture_area = numpy.sum(tri_areas)
 
         TEXTURE_DIMENSION = min(math.sqrt(total_texture_area), 2048.0)
         TEXTURE_SIZE = TEXTURE_DIMENSION * TEXTURE_DIMENSION
         
-        rp = RectPack()
-        self.chart_ims = {}
-        self.chart_masks = {}
         for face, facedata in self.facegraph.nodes_iter(data=True):
             
             if facedata['diffuse'] is not None:
@@ -1186,7 +1229,26 @@ class SanderSimplify(object):
             #round to power of 2 with 1 pixel border
             relsize = int(math.pow(2, round(math.log(relsize, 2)))) - 2
             
+            chart_area = numpy.sum(tri_areas[facedata['tris']])
+            chart_square_dimension = max(int(math.sqrt(chart_area)), 2)
+            
+            if relsize > 2 and relsize > chart_square_dimension:
+                L2_reduction = float(relsize - chart_square_dimension) / relsize
+                facedata['L2'] -= facedata['L2'] * L2_reduction
+                self.total_L2 -= facedata['L2'] * L2_reduction
+                relsize = chart_square_dimension
+            
             self.facegraph.node[face]['chartsize'] = relsize
+        
+        rp = RectPack()
+        self.chart_ims = {}
+        self.chart_masks = {}
+        for face, facedata in self.facegraph.nodes_iter(data=True):
+            
+            if facedata['diffuse'] is not None:
+                continue
+
+            relsize = facedata['chartsize']
             
             chartim = Image.new('RGB', (relsize, relsize))
             chartmask = Image.new('L', (relsize, relsize), 255)
@@ -1460,7 +1522,6 @@ class SanderSimplify(object):
                 
                 self.contraction_priorities.append((combined_error, (v1, v2)))
                 
-
         heapq.heapify(self.contraction_priorities)
 
         self.end_operation()
@@ -1483,10 +1544,10 @@ class SanderSimplify(object):
             #cutoff value was chosen which seems to work well for most models
             if error > 0:
                 logrel = math.log(1 + error) / math.log(1 + self.maxerror)
+                #print 'error', error, 'maxerror', self.maxerror, 'logrel', logrel, 'v1', v1, 'v2', v2, 'numverts', len(self.vertexgraph), 'numfaces', len(self.tris_left), 'contractions left', len(self.contraction_priorities)
             else: logrel = 0
             if logrel > SIMPLIFICATION_ERROR_THRESHOLD:
                 break
-            #print 'error', error, 'maxerror', self.maxerror, 'logerr', logrel, 'v1', v1, 'v2', v2, 'numverts', len(self.vertexgraph), 'numfaces', len(self.tris_left), 'contractions left', len(self.contraction_priorities)
             
             v2tris = list(self.vertexgraph.node[v2]['tris'])
             v1tris = self.vertexgraph.node[v1]['tris']
