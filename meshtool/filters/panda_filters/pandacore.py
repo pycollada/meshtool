@@ -602,10 +602,10 @@ def setupPandaApp(mesh):
     rotateNode = GeomNode("rotater")
     rotatePath = nodePath.attachNewNode(rotateNode)
     matrix = numpy.identity(4)
-    if mesh.assetInfo['up_axis'] == 'X_UP':
+    if mesh.assetInfo.upaxis == collada.asset.UP_AXIS.X_UP:
         r = collada.scene.RotateTransform(0,1,0,90)
         matrix = r.matrix
-    elif mesh.assetInfo['up_axis'] == 'Y_UP':
+    elif mesh.assetInfo.upaxis == collada.asset.UP_AXIS.Y_UP:
         r = collada.scene.RotateTransform(1,0,0,90)
         matrix = r.matrix
     rotatePath.setMat(Mat4(*matrix.T.flatten().tolist()))
