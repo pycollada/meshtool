@@ -52,6 +52,11 @@ View
 ----
 * ``--viewer`` - Uses panda3d to bring up a viewer - depends on
 [Panda3d](http://www.panda3d.org/)
+* ``--collada_viewer`` - Uses panda3d to bring up a viewer with lights and
+camera from the collada file
+* ``--pm_viewer pm_file`` - Uses panda3d to bring up a viewer of a base mesh and
+progressive stream
+
 
 Screenshots
 -----------
@@ -91,6 +96,7 @@ vertex information from the mesh. Removes percent percentage of the vertices and
 saves our the results into filename. The file can be loaded with --load_pm.
 * ``--load_pm percent filename`` - Loads percent percentage of the extra vertex
 information from filename (saved with --simplify) back into the loaded mesh.
+* ``--sander_simplify pm_file`` - Simplifies the mesh based on sandler, et al. method.
 
 Texture Operations
 ------------------

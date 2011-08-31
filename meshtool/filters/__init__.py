@@ -16,6 +16,7 @@ import meshtool.filters.print_filters.print_render_info
 
 #Viewer
 import meshtool.filters.panda_filters.viewer
+import meshtool.filters.panda_filters.collada_viewer
 import meshtool.filters.panda_filters.pm_viewer
 
 #Optimizations
