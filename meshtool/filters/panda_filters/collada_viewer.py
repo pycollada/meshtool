@@ -7,6 +7,7 @@ from direct.showbase.ShowBase import ShowBase
 from panda3d.core import GeomNode, TransparencyAttrib
 from panda3d.core import AmbientLight, DirectionalLight, PointLight, Spotlight
 from panda3d.core import Vec4, Vec3, Point3, Mat4
+from panda3d.core import loadPrcFileData
 import collada
 import math
 from pandacontrols import KeyboardMovement, MouseDrag, MouseScaleZoom
@@ -14,6 +15,7 @@ from pandacontrols import KeyboardMovement, MouseDrag, MouseScaleZoom
 def runViewer(mesh):
     scene_members = getSceneMembers(mesh)
     
+    loadPrcFileData('', 'win-size 300 300')
     base = ShowBase()
     globNode = GeomNode("collada")
     nodePath = base.render.attachNewNode(globNode)
@@ -77,13 +79,37 @@ def runViewer(mesh):
         base.render.setLight(lightNP)
 
     for boundcam in mesh.scene.objects('camera'):
-        base.camera.reparentTo(rotatePath)
-        base.camLens.setNear(boundcam.near)
-        base.camLens.setFar(boundcam.far)
-        base.camLens.setFov(boundcam.fov)
-        base.camera.setPos(Vec3(boundcam.position[0], boundcam.position[1], boundcam.position[2]))
-        base.camera.lookAt(Point3(boundcam.direction[0], boundcam.direction[1], boundcam.direction[2]),
-                           Vec3(boundcam.up[0], boundcam.up[1], boundcam.up[2]))
+        if isinstance(boundcam, collada.camera.BoundPerspectiveCamera):
+            base.camera.reparentTo(rotatePath)
+            base.camLens.setNear(boundcam.znear)
+            base.camLens.setFar(boundcam.zfar)
+            
+            if boundcam.xfov is not None and boundcam.yfov is not None:
+                #xfov + yfov
+                base.camLens.setFov(boundcam.xfov, boundcam.yfov)
+            elif boundcam.xfov is not None and boundcam.aspect_ratio is not None:
+                #xfov + aspect_ratio
+                base.camLens.setFov(boundcam.xfov)
+                base.camLens.setAspectRatio(boundcam.aspect_ratio)
+            elif boundcam.yfov is not None and boundcam.aspect_ratio is not None:
+                #yfov + aspect_ratio
+                #aspect_ratio = tan(0.5*xfov) / tan(0.5*yfov)
+                xfov = math.degrees(2.0 * math.atan(boundcam.aspect_ratio * math.tan(math.radians(0.5 * boundcam.yfov))))
+                base.camLens.setFov(xfov, boundcam.yfov)
+            elif boundcam.yfov is not None:
+                #yfov only
+                #aspect_ratio = tan(0.5*xfov) / tan(0.5*yfov)
+                xfov = math.degrees(2.0 * math.atan(base.camLens.getAspectRatio() * math.tan(math.radians(0.5 * boundcam.yfov))))
+                base.camLens.setFov(xfov, boundcam.yfov)
+            elif boundcam.xfov is not None:
+                base.camLens.setFov(boundcam.xfov)
+            
+            base.camera.setPos(Vec3(boundcam.position[0], boundcam.position[1], boundcam.position[2]))
+            base.camera.lookAt(Point3(boundcam.direction[0], boundcam.direction[1], boundcam.direction[2]),
+                               Vec3(boundcam.up[0], boundcam.up[1], boundcam.up[2]))
+        else:
+            print 'Unknown camera type', boundcam
+            continue
 
     base.disableMouse()
     base.render.setShaderAuto()
