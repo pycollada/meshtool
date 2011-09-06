@@ -4,7 +4,7 @@ from meshtool.filters.base_filters import *
 from pandacore import getSceneMembers
 import numpy
 from direct.showbase.ShowBase import ShowBase
-from panda3d.core import GeomNode, TransparencyAttrib
+from panda3d.core import GeomNode, TransparencyAttrib, OrthographicLens
 from panda3d.core import AmbientLight, DirectionalLight, PointLight, Spotlight
 from panda3d.core import Vec4, Vec3, Point3, Mat4
 from panda3d.core import loadPrcFileData
@@ -107,6 +107,37 @@ def runViewer(mesh):
             base.camera.setPos(Vec3(boundcam.position[0], boundcam.position[1], boundcam.position[2]))
             base.camera.lookAt(Point3(boundcam.direction[0], boundcam.direction[1], boundcam.direction[2]),
                                Vec3(boundcam.up[0], boundcam.up[1], boundcam.up[2]))
+        elif isinstance(boundcam, collada.camera.BoundOrthographicCamera):
+            
+            lens = OrthographicLens()
+            base.cam.node().setLens(lens)
+            base.camLens = lens
+            base.camera.reparentTo(rotatePath)
+            base.camLens.setNear(boundcam.znear)
+            base.camLens.setFar(boundcam.zfar)
+            
+            if boundcam.xmag is not None and boundcam.ymag is not None:
+                #xmag + ymag
+                base.camLens.setFilmSize(boundcam.xmag, boundcam.ymag)
+            elif boundcam.xmag is not None and boundcam.aspect_ratio is not None:
+                #xmag + aspect_ratio
+                base.camLens.setFilmSize(boundcam.xmag)
+                base.camLens.setAspectRatio(boundcam.aspect_ratio)
+            elif boundcam.ymag is not None and boundcam.aspect_ratio is not None:
+                #ymag + aspect_ratio
+                xmag = boundcam.aspect_ratio * boundcam.ymag
+                base.camLens.setFilmSize(xmag, boundcam.ymag)
+            elif boundcam.ymag is not None:
+                #ymag only
+                xmag = base.camLens.getAspectRatio() * boundcam.ymag
+                base.camLens.setFilmSize(xmag, boundcam.ymag)
+            elif boundcam.xmag is not None:
+                base.camLens.setFilmSize(boundcam.xmag)
+            
+            base.camera.setPos(Vec3(boundcam.position[0], boundcam.position[1], boundcam.position[2]))
+            base.camera.lookAt(Point3(boundcam.direction[0], boundcam.direction[1], boundcam.direction[2]),
+                               Vec3(boundcam.up[0], boundcam.up[1], boundcam.up[2]))
+            
         else:
             print 'Unknown camera type', boundcam
             continue
