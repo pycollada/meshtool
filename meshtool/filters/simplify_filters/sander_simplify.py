@@ -16,11 +16,15 @@ import random
 import collada
 import Image
 import ImageDraw
-import ImageFile
+import PIL.ImageFile as ImageFile
 from meshtool.filters.atlas_filters.rectpack import RectPack
 from StringIO import StringIO
 import meshtool.filters
 import bisect
+
+try: import pyopencv as cv
+except ImportError:
+    cv = None
 
 ImageFile.MAXBLOCK = 20*1024*1024 # default is 64k, setting to 20MB to handle large textures
 
@@ -228,7 +232,11 @@ def transformblit(src_tri, dst_tri, src_img, dst_img):
     
     y = numpy.array([x11, x21, x31, x12, x22, x32])
 
-    A = numpy.linalg.solve(M, y)
+    try:
+        A = numpy.linalg.solve(M, y)
+    except numpy.linalg.LinAlgError:
+        #can happen if the new triangle is a single point, so no need to paint it
+        return
 
     transformed = src_img.transform((sizex, sizey), Image.AFFINE, A, Image.BICUBIC)
     
@@ -237,6 +245,42 @@ def transformblit(src_tri, dst_tri, src_img, dst_img):
     maskdraw.polygon(((y11,y12), (y21,y22), (y31,y32)), outline=255, fill=255)
 
     dst_img.paste(transformed, (minx, miny), mask=mask)
+
+def opencvblit(src_tri, dst_tri, src_cv_img, dst_pil_img):
+    """Pastes a triangular region from one image
+    into a triangular region in another image by
+    using an affine transformation. Uses pyopencv
+    for the source image and PIL for the destination
+    image."""
+    
+    ((x11,x12), (x21,x22), (x31,x32)) = src_tri
+    ((y11,y12), (y21,y22), (y31,y32)) = dst_tri
+
+    minx = int(math.floor(min(y11, y21, y31)))
+    miny = int(math.floor(min(y12, y22, y32)))
+    y11 -= minx
+    y21 -= minx
+    y31 -= minx
+    y12 -= miny
+    y22 -= miny
+    y32 -= miny
+    sizex = int(math.ceil(max(y11, y21, y31)))
+    sizey = int(math.ceil(max(y12, y22, y32)))
+    
+    src_vec = cv.vector_Point2f([cv.Point2f(float(x),float(y)) for (x,y) in src_tri])
+    dst_vec = cv.vector_Point2f([cv.Point2f(float(x),float(y)) for (x,y) in [(y11,y12), (y21,y22), (y31,y32)]])
+    
+    A = cv.getAffineTransform(src_vec, dst_vec)
+    
+    transformed_im = cv.Mat()
+    cv.warpAffine(src_cv_img, transformed_im, A, cv.Size(sizex, sizey), cv.INTER_CUBIC, cv.BORDER_WRAP)
+    
+    transformed_im = transformed_im.to_pil_image()
+    mask = Image.new('1', (sizex, sizey))
+    maskdraw = ImageDraw.Draw(mask)
+    maskdraw.polygon(((y11,y12), (y21,y22), (y31,y32)), outline=255, fill=255)
+
+    dst_pil_img.paste(transformed_im, (minx, miny), mask=mask)
 
 def evalQuadric(A, b, c, pt):
     """Evaluates a quadric Q = (A,b,c) at the point pt"""
@@ -1243,17 +1287,18 @@ class SanderSimplify(object):
         rp = RectPack()
         self.chart_ims = {}
         self.chart_masks = {}
+        self.pil_to_cv = {}
         for face, facedata in self.facegraph.nodes_iter(data=True):
             
             if facedata['diffuse'] is not None:
                 continue
-
-            relsize = facedata['chartsize']
             
+            relsize = facedata['chartsize']
+
             chartim = Image.new('RGB', (relsize, relsize))
             chartmask = Image.new('L', (relsize, relsize), 255)
             maskdraw = ImageDraw.Draw(chartmask)
-            chartdraw = ImageDraw.Draw(chartim)
+                
             for tri in facedata['tris']:
                 
                 newuvs = self.new_uvs[self.new_uv_indices[tri]]
@@ -1266,24 +1311,29 @@ class SanderSimplify(object):
                 if bisect_loc >= len(self.tri2material) or tri != self.tri2material[bisect_loc][0]:
                     bisect_loc -= 1
                 diffuse_source = self.material2color[self.tri2material[bisect_loc][1]]
-                if isinstance(diffuse_source, tuple):
-                    color = (int(diffuse_source[0]*255), int(diffuse_source[1]*255), int(diffuse_source[2]*255))
-                    chartdraw.polygon(newtri, fill=color, outline=color)
+                if cv is not None:
+                    cv_diffuse_source = self.pil_to_cv.get(diffuse_source)
+                    if cv_diffuse_source is None:
+                        cv_diffuse_source = cv.Mat.from_pil_image(diffuse_source)
+                        self.pil_to_cv[diffuse_source] = cv_diffuse_source
+                
+                prevuvs = self.all_orig_uvs[self.all_orig_uv_indices[tri]]
+                prevu = prevuvs[:,0] * diffuse_source.size[0]
+                prevv = (1.0-prevuvs[:,1]) * diffuse_source.size[1]
+                prevtri = [(prevu[0], prevv[0]), (prevu[1], prevv[1]), (prevu[2], prevv[2])]
+                
+                if cv is None:
+                    transformblit(prevtri, newtri, diffuse_source, chartim)
                 else:
-                    prevuvs = self.all_orig_uvs[self.all_orig_uv_indices[tri]]
-                    prevu = prevuvs[:,0] * diffuse_source.size[0]
-                    prevv = (1.0-prevuvs[:,1]) * diffuse_source.size[1]
-                    prevtri = [(prevu[0], prevv[0]), (prevu[1], prevv[1]), (prevu[2], prevv[2])]
-                    try:
-                        transformblit(prevtri, newtri, diffuse_source, chartim)
-                    except numpy.linalg.LinAlgError:
-                        #can happen if the new triangle is a single point, so no need to paint it
-                        pass
+                    #we prefer opencv because it allows us to wrap the texcoords
+                    opencvblit(prevtri, newtri, cv_diffuse_source, chartim)
+                    
             self.chart_ims[face] = chartim
             self.chart_masks[face] = chartmask
 
             rp.addRectangle(face, relsize+2, relsize+2)
         
+        del self.pil_to_cv
         assert(rp.pack())
         
         #find size for color charts so that they are still visible at 128x128 mipmap
@@ -1678,24 +1728,18 @@ class SanderSimplify(object):
         #now that we are finished setting the uvs, we can uniqify it
         self.new_uvs, self.new_uv_indices, self.old2newuvmap = uniqify_multidim_indexes(self.new_uvs, self.new_uv_indices, return_map=True)
 
-        docvfill = True
-        try: import cv
-        except ImportError: docvfill = False
-        if not docvfill:
-            return self.end_operation()
-
-        #convert image and mask to opencv format
-        cv_im = cv.CreateImageHeader(self.atlasimg.size, cv.IPL_DEPTH_8U, 3)
-        cv.SetData(cv_im, self.atlasimg.tostring())
-        cv_mask = cv.CreateImageHeader(atlasmask.size, cv.IPL_DEPTH_8U, 1)
-        cv.SetData(cv_mask, atlasmask.tostring())
-
-        #do the inpainting
-        cv_painted_im = cv.CloneImage(cv_im)
-        cv.Inpaint(cv_im, cv_mask, cv_painted_im, 3, cv.CV_INPAINT_TELEA)
-
-        #convert back to PIL
-        self.atlasimg = Image.fromstring("RGB", cv.GetSize(cv_painted_im), cv_painted_im.tostring())
+        if cv is not None:
+            #convert image and mask to opencv format
+            cv_im = cv.Mat.from_pil_image(self.atlasimg)
+            cv_mask = cv.Mat.from_pil_image(atlasmask)
+            cv_mask = cv_mask.reshape(1, cv_im.rows)
+    
+            #do the inpainting
+            cv_painted_im = cv_im.clone()
+            cv.inpaint(cv_im, cv_mask, cv_painted_im, 3, cv.INPAINT_TELEA)
+    
+            #convert back to PIL
+            self.atlasimg = cv_painted_im.to_pil_image()
 
         self.end_operation()
 
