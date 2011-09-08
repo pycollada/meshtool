@@ -1225,7 +1225,8 @@ class SanderSimplify(object):
             chart_L2 = stretch_metric(tri_3d, tri_2d, normalize=True)
             total_L2 += chart_L2
             self.facegraph.node[face]['L2'] = chart_L2
-            self.total_L2 = total_L2
+            
+        self.total_L2 = total_L2
             
         self.end_operation()
 
@@ -1261,28 +1262,23 @@ class SanderSimplify(object):
 
         TEXTURE_DIMENSION = min(math.sqrt(total_texture_area), 2048.0)
         TEXTURE_SIZE = TEXTURE_DIMENSION * TEXTURE_DIMENSION
-        
+
+        new_total_L2 = self.total_L2
         for face, facedata in self.facegraph.nodes_iter(data=True):
-            
             if facedata['diffuse'] is not None:
                 continue
             
-            relsize = int(math.sqrt((facedata['L2'] / self.total_L2) * TEXTURE_SIZE))
-            if relsize < 4: relsize = 4
-            
-            #round to power of 2 with 1 pixel border
-            relsize = int(math.pow(2, round(math.log(relsize, 2)))) - 2
-            
             chart_area = numpy.sum(tri_areas[facedata['tris']])
-            chart_square_dimension = max(int(math.sqrt(chart_area)), 2)
+            l2_frac = facedata['L2'] / self.total_L2
+            area_frac = chart_area / total_texture_area
+            fair_share = math.sqrt(l2_frac * area_frac) * TEXTURE_SIZE
             
-            if relsize > 2 and relsize > chart_square_dimension:
-                L2_reduction = float(relsize - chart_square_dimension) / relsize
-                facedata['L2'] -= facedata['L2'] * L2_reduction
-                self.total_L2 -= facedata['L2'] * L2_reduction
-                relsize = chart_square_dimension
-            
-            self.facegraph.node[face]['chartsize'] = relsize
+            if fair_share > chart_area and fair_share > 16:
+                newface_L2 = (((chart_area / TEXTURE_SIZE) ** 2) / area_frac) * self.total_L2
+                new_total_L2 -= facedata['L2'] - newface_L2
+                facedata['L2'] = newface_L2
+
+        self.total_L2 = new_total_L2
         
         rp = RectPack()
         self.chart_ims = {}
@@ -1293,17 +1289,55 @@ class SanderSimplify(object):
             if facedata['diffuse'] is not None:
                 continue
             
-            relsize = facedata['chartsize']
+            #calculate fair share but multiplying the L2 fraction with
+            # the fraction that the chart takes up in the total area
+            # then take the square root so that it sums to 1
+            chart_area = numpy.sum(tri_areas[facedata['tris']])
+            l2_frac = facedata['L2'] / self.total_L2
+            area_frac = chart_area / total_texture_area
+            fair_share = math.sqrt(l2_frac * area_frac) * TEXTURE_SIZE
+            
+            #get the x range and y range of the chart circle
+            chart_uv_locs = numpy.unique(self.new_uv_indices[facedata['tris']])
+            minx = numpy.min(self.new_uvs[chart_uv_locs, 0])
+            maxx = numpy.max(self.new_uvs[chart_uv_locs, 0])
+            miny = numpy.min(self.new_uvs[chart_uv_locs, 1])
+            maxy = numpy.max(self.new_uvs[chart_uv_locs, 1])
+            #then scale the chart uvs to be in the range 0,1
+            self.new_uvs[chart_uv_locs, 0] -= minx
+            chart_width_frac = (maxx - minx)
+            self.new_uvs[chart_uv_locs, 0] *= 1.0 / chart_width_frac
+            self.new_uvs[chart_uv_locs, 1] -= miny
+            chart_height_frac = (maxy - miny)
+            self.new_uvs[chart_uv_locs, 1] *= 1.0 / chart_height_frac
 
-            chartim = Image.new('RGB', (relsize, relsize))
-            chartmask = Image.new('L', (relsize, relsize), 255)
+            #now chart width and height can be calculated by the uv range and fair share fraction
+            chart_width = math.pow(fair_share, chart_width_frac / (chart_width_frac + chart_height_frac))
+            chart_height = math.pow(fair_share, chart_height_frac / (chart_width_frac + chart_height_frac))
+            if chart_width > TEXTURE_DIMENSION:
+                chart_height = fair_share / TEXTURE_DIMENSION
+                chart_width = TEXTURE_DIMENSION
+            if chart_height > TEXTURE_DIMENSION:
+                chart_width += fair_share / TEXTURE_DIMENSION
+                chart_height = TEXTURE_DIMENSION
+            if chart_width < 4: chart_width = 4.0
+            if chart_height < 4: chart_height = 4.0
+            
+            #round to power of 2 with 1 pixel border
+            chart_width = int(math.pow(2, round(math.log(chart_width, 2)))) - 2
+            chart_height = int(math.pow(2, round(math.log(chart_height, 2)))) - 2
+            
+            self.facegraph.node[face]['chart_size'] = (chart_width, chart_height)
+
+            chartim = Image.new('RGB', (chart_width, chart_height))
+            chartmask = Image.new('L', (chart_width, chart_height), 255)
             maskdraw = ImageDraw.Draw(chartmask)
                 
             for tri in facedata['tris']:
                 
                 newuvs = self.new_uvs[self.new_uv_indices[tri]]
-                newu = (newuvs[:,0] * (relsize-0.5))
-                newv = ((1.0-newuvs[:,1]) * (relsize-0.5))
+                newu = (newuvs[:,0] * (chart_width-0.5))
+                newv = ((1.0-newuvs[:,1]) * (chart_height-0.5))
                 newtri = [(newu[0], newv[0]), (newu[1], newv[1]), (newu[2], newv[2])]
                 maskdraw.polygon(newtri, fill=0, outline=0)
                 
@@ -1331,7 +1365,7 @@ class SanderSimplify(object):
             self.chart_ims[face] = chartim
             self.chart_masks[face] = chartmask
 
-            rp.addRectangle(face, relsize+2, relsize+2)
+            rp.addRectangle(face, chart_width+2, chart_height+2)
         
         del self.pil_to_cv
         assert(rp.pack())
@@ -1371,9 +1405,9 @@ class SanderSimplify(object):
             
             if facedata['diffuse'] is not None: continue
             
-            relsize = self.facegraph.node[face]['chartsize']
-            self.new_uvs[chart_uvs, 0] *= relsize-0.5
-            self.new_uvs[chart_uvs, 1] *= relsize-0.5
+            (chart_width, chart_height) = self.facegraph.node[face]['chart_size']
+            self.new_uvs[chart_uvs, 0] *= chart_width-0.5
+            self.new_uvs[chart_uvs, 1] *= chart_height-0.5
         
         self.end_operation()
 
@@ -1383,12 +1417,12 @@ class SanderSimplify(object):
         for face, facedata in self.facegraph.nodes_iter(data=True):
             if facedata['diffuse'] is not None: continue
             
-            relsize = self.facegraph.node[face]['chartsize']
+            (chart_width, chart_height) = self.facegraph.node[face]['chart_size']
             
             chart_uvs = self.facegraph.node[face]['chart_uvs']
 
-            self.new_uvs[chart_uvs, 0] /= relsize-0.5
-            self.new_uvs[chart_uvs, 1] /= relsize-0.5
+            self.new_uvs[chart_uvs, 0] /= chart_width-0.5
+            self.new_uvs[chart_uvs, 1] /= chart_height-0.5
         
         self.end_operation()
 
