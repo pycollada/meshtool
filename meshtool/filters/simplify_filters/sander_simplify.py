@@ -175,6 +175,7 @@ def stretch_metric(t3d, t2d, return_A2d=False, flippedCheck=None, normalize=Fals
         if flippedCheck is None and sumA3d == 0:
             L2 = 0
         else:
+            A3d[L2 == numpy.inf] = numpy.inf
             L2 = numpy.sqrt(numpy.sum(L2*L2*A3d) / sumA3d) * numpy.sqrt(numpy.sum(numpy.abs(A2d)) / sumA3d)
         
     if return_A2d:
@@ -303,9 +304,7 @@ def quadricsForTriangles(tris):
     sp = (s1 + s2 + s3) / 2.0
     area = sp*(sp-s1)*(sp-s2)*(sp-s3)
     
-    area_zeros = numpy.zeros(area.shape, area.dtype)
-    area = numpy.where(area < 0, area_zeros, numpy.sqrt(area))
-    area_zeros = None
+    area = numpy.sqrt(numpy.abs(area))
     
     d = -array_mult(normal, tris[:,0])
 
@@ -1260,6 +1259,12 @@ class SanderSimplify(object):
             tri_areas = numpy.concatenate(tri_areas)
         total_texture_area = numpy.sum(tri_areas)
 
+        total_3d_area = 0
+        for face, facedata in self.facegraph.nodes_iter(data=True):
+            chart_3d_area = numpy.sum(tri_areas_3d(self.all_vertices[self.all_vert_indices[facedata['tris']]]))
+            facedata['chart_3d_area'] = chart_3d_area
+            total_3d_area += chart_3d_area
+
         TEXTURE_DIMENSION = min(math.sqrt(total_texture_area), 2048.0)
         TEXTURE_SIZE = TEXTURE_DIMENSION * TEXTURE_DIMENSION
 
@@ -1271,7 +1276,8 @@ class SanderSimplify(object):
             chart_area = numpy.sum(tri_areas[facedata['tris']])
             l2_frac = facedata['L2'] / self.total_L2
             area_frac = chart_area / total_texture_area
-            fair_share = math.sqrt(l2_frac * area_frac) * TEXTURE_SIZE
+            area3d_frac = facedata['chart_3d_area'] / total_3d_area
+            fair_share = ((l2_frac * area_frac * area3d_frac) ** (1.0/3.0)) * TEXTURE_SIZE
             
             if fair_share > chart_area and fair_share > 16:
                 newface_L2 = (((chart_area / TEXTURE_SIZE) ** 2) / area_frac) * self.total_L2
@@ -1295,7 +1301,8 @@ class SanderSimplify(object):
             chart_area = numpy.sum(tri_areas[facedata['tris']])
             l2_frac = facedata['L2'] / self.total_L2
             area_frac = chart_area / total_texture_area
-            fair_share = math.sqrt(l2_frac * area_frac) * TEXTURE_SIZE
+            area3d_frac = facedata['chart_3d_area'] / total_3d_area
+            fair_share = ((l2_frac * area_frac * area3d_frac) ** (1.0/3.0)) * TEXTURE_SIZE
             
             #get the x range and y range of the chart circle
             chart_uv_locs = numpy.unique(self.new_uv_indices[facedata['tris']])
@@ -1314,12 +1321,12 @@ class SanderSimplify(object):
             #now chart width and height can be calculated by the uv range and fair share fraction
             chart_width = math.pow(fair_share, chart_width_frac / (chart_width_frac + chart_height_frac))
             chart_height = math.pow(fair_share, chart_height_frac / (chart_width_frac + chart_height_frac))
-            if chart_width > TEXTURE_DIMENSION:
-                chart_height = fair_share / TEXTURE_DIMENSION
-                chart_width = TEXTURE_DIMENSION
-            if chart_height > TEXTURE_DIMENSION:
-                chart_width += fair_share / TEXTURE_DIMENSION
-                chart_height = TEXTURE_DIMENSION
+            if chart_width > (TEXTURE_DIMENSION / 2.0):
+                chart_height = fair_share / (TEXTURE_DIMENSION / 2.0)
+                chart_width = (TEXTURE_DIMENSION / 2.0)
+            if chart_height > (TEXTURE_DIMENSION / 2.0):
+                chart_width += fair_share / (TEXTURE_DIMENSION / 2.0)
+                chart_height = (TEXTURE_DIMENSION / 2.0)
             if chart_width < 4: chart_width = 4.0
             if chart_height < 4: chart_height = 4.0
             
@@ -1949,6 +1956,7 @@ class SanderSimplify(object):
         self.create_initial_parameterizations()
         self.optimize_chart_parameterizations()
         self.resize_charts()
+        print 'texture size = (%dx%d)' % (self.chart_packing.width, self.chart_packing.height)
         
         self.initialize_simplification_errors()
         self.simplify_mesh()
