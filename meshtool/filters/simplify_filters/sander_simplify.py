@@ -268,6 +268,11 @@ def opencvblit(src_tri, dst_tri, src_cv_img, dst_pil_img):
     sizex = int(math.ceil(max(y11, y21, y31)))
     sizey = int(math.ceil(max(y12, y22, y32)))
     
+    #if the destination size is 0, no point in performing the transformation
+    # and opencv throws an exception that we can't catch anyway
+    if sizex < 1 or sizey < 1:
+        return
+    
     src_vec = cv.vector_Point2f([cv.Point2f(float(x),float(y)) for (x,y) in src_tri])
     dst_vec = cv.vector_Point2f([cv.Point2f(float(x),float(y)) for (x,y) in [(y11,y12), (y21,y22), (y31,y32)]])
     
@@ -1477,28 +1482,28 @@ class SanderSimplify(object):
             
             face_vert2uvidx = self.facegraph.node[facefrom]['vert2uvidx']
             
-            moved_vert_idx = self.all_vert_indices[moved_tri_idx]
-            other_pts = [ m for m in moved_vert_idx if m != v2 ]
-            other_uv_pts = [ self.new_uvs[face_vert2uvidx[m]] for m in other_pts ]
-            
-            #m = (y2-y1)/(x2-x1)
-            slope = (other_uv_pts[1][1] - other_uv_pts[0][1]) / (other_uv_pts[1][0] - other_uv_pts[0][0])
-            #y = mx + b
-            #b = y-mx
-            yint = other_uv_pts[0][1] - slope * other_uv_pts[0][0]
-        
             #don't want to cross chart boundaries
             if v1 not in face_vert2uvidx:
                 return
             
+            moved_vert_idx = self.all_vert_indices[moved_tri_idx]
+            other_pts = [ m for m in moved_vert_idx if m != v2 ]
+            other_uv_pts = [ self.new_uvs[face_vert2uvidx[m]] for m in other_pts ]
+            
             v2_pt = self.new_uvs[face_vert2uvidx[v2]]
             v1_pt = self.new_uvs[face_vert2uvidx[v1]]
-            v2_atline = slope * v2_pt[0] + yint
-            v1_atline = slope * v1_pt[0] + yint
+            
+            #this checks if the triangle has flipped
+            # see: http://stackoverflow.com/questions/7365531/detecting-if-a-triangle-flips-when-changing-a-point
+            vec1 = numpy.array([other_uv_pts[1][0] - other_uv_pts[0][0], other_uv_pts[1][1] - other_uv_pts[0][1], 0], dtype=numpy.float32)
+            vec2_v1 = numpy.array([v1_pt[0] - other_uv_pts[0][0], v1_pt[1] - other_uv_pts[0][1], 0], dtype=numpy.float32)
+            vec2_v2 = numpy.array([v2_pt[0] - other_uv_pts[0][0], v2_pt[1] - other_uv_pts[0][1], 0], dtype=numpy.float32)
+            v1_direction = numpy.cross(vec1, vec2_v1)[2]
+            v2_direction = numpy.cross(vec1, vec2_v2)[2]
             
             #don't want to flip the triangle in the parametric domain
-            if v2_atline > 0 and not(v1_atline > 0) or \
-                v2_atline < 0 and not(v1_atline < 0):
+            if v2_direction > 0 and not(v1_direction > 0) or \
+                v2_direction < 0 and not(v1_direction < 0):
                 return
 
             other_v3_pts = [self.all_vertices[m] for m in other_pts]
