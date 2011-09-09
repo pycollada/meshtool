@@ -1307,7 +1307,7 @@ class SanderSimplify(object):
             l2_frac = facedata['L2'] / self.total_L2
             area_frac = chart_area / total_texture_area
             area3d_frac = facedata['chart_3d_area'] / total_3d_area
-            fair_share = ((l2_frac * area_frac * area3d_frac) ** (1.0/3.0)) * TEXTURE_SIZE
+            fair_share = ((l2_frac + area_frac + area3d_frac) / 3.0) * TEXTURE_SIZE
             
             #get the x range and y range of the chart circle
             chart_uv_locs = numpy.unique(self.new_uv_indices[facedata['tris']])
