@@ -1910,7 +1910,6 @@ class SanderSimplify(object):
         for op in operations_buffer:
             self.pmbuf.write(op)
         operations_buffer = None
-        self.pmbuf.close()
         
         self.end_operation()
         
@@ -2028,10 +2027,13 @@ def FilterGenerator():
             super(SandlerSimplificationFilter, self).__init__('sander_simplify', 'Simplifies the mesh based on sandler, et al. method.')
             self.arguments.append(FileArgument('pm_file', 'Where to save the progressive mesh stream'))
         def apply(self, mesh, pm_file):
-            pmout = open(pm_file, 'w')
+            try:
+                pmout = open(pm_file, 'w')
+            except TypeError:
+                pmout = pm_file
+            
             s = SanderSimplify(mesh, pmout)
             mesh = s.simplify()
-            pmout.close()
             return mesh
     return SandlerSimplificationFilter()
 from meshtool.filters import factory
