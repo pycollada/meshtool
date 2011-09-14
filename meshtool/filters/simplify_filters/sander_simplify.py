@@ -331,6 +331,7 @@ def uniqify_multidim_indexes(sourcedata, indices, return_map=False):
     return unique_data.view(sourcedata.dtype).reshape(-1,sourcedata.shape[1]), index_map[indices]
 
 class STREAM_OP:
+    OPERATION_BOUNDARY = 0
     INDEX_UPDATE = 1
     TRIANGLE_ADDITION = 2
 
@@ -1660,6 +1661,8 @@ class SanderSimplify(object):
             if invalid_contraction:
                 continue
             
+            self.simplify_operations.append(STREAM_OP.OPERATION_BOUNDARY)
+            
             #do degenerate first so we can record values for progressive stream
             degenerate = set()
             for t2, t2_idx in izip(v2tris, v2tri_idx):
@@ -1837,8 +1840,25 @@ class SanderSimplify(object):
         print 'num unique vert data locs in base mesh', len(unique_stacked_indices)
         print 'num triangles in base mesh', len(self.tris_left)
         cur_triangle = len(self.tris_left)
+        
+        vertex_buffer = []
+        update_buffer = []
+        triangle_buffer = []
+        operations_buffer = []
+        
         for operation in reversed(self.simplify_operations):
-            if operation[0] == STREAM_OP.INDEX_UPDATE:
+            if operation == STREAM_OP.OPERATION_BOUNDARY:
+                num_ops = len(vertex_buffer) + len(update_buffer) + len(triangle_buffer)
+                if num_ops > 0:
+                    entire_op = "%d\n" % num_ops
+                    for s in chain(vertex_buffer, triangle_buffer, update_buffer):
+                        entire_op += s
+                    operations_buffer.append(entire_op)
+                    vertex_buffer = []
+                    update_buffer = []
+                    triangle_buffer = []
+            
+            elif operation[0] == STREAM_OP.INDEX_UPDATE:
                 op, tri_index, vert_index, changed_vert, changed_normal, changed_uv = operation
                 changed_uv = self.old2newuvmap[changed_uv]
                 #print 'index update', tri_index, vert_index, changed_vert, changed_normal, changed_uv
@@ -1849,9 +1869,9 @@ class SanderSimplify(object):
                     v = self.all_vertices[changed_vert]
                     n = self.all_normals[changed_normal]
                     u = self.new_uvs[changed_uv]
-                    self.pmbuf.write("v %.7g %.7g %.7g %.7g %.7g %.7g %.7g %.7g\n" % (v[0], v[1], v[2], n[0], n[1], n[2], u[0], u[1]))
+                    vertex_buffer.append("v %.7g %.7g %.7g %.7g %.7g %.7g %.7g %.7g\n" % (v[0], v[1], v[2], n[0], n[1], n[2], u[0], u[1]))
                     oldindex2newindex[unique_old_index] = len(oldindex2newindex)
-                self.pmbuf.write("u %d %d\n" % (new_tri_index*3 + vert_index, oldindex2newindex[unique_old_index]))
+                update_buffer.append("u %d %d\n" % (new_tri_index*3 + vert_index, oldindex2newindex[unique_old_index]))
                 
             elif operation[0] == STREAM_OP.TRIANGLE_ADDITION:
                 op, oldtri, vert_idx, norm_idx, uv_idx = operation
@@ -1868,14 +1888,29 @@ class SanderSimplify(object):
                         v = self.all_vertices[pt[0]]
                         n = self.all_normals[pt[1]]
                         u = self.new_uvs[pt[2]]
-                        self.pmbuf.write("v %.7g %.7g %.7g %.7g %.7g %.7g %.7g %.7g\n" % (v[0], v[1], v[2], n[0], n[1], n[2], u[0], u[1]))
+                        vertex_buffer.append("v %.7g %.7g %.7g %.7g %.7g %.7g %.7g %.7g\n" % (v[0], v[1], v[2], n[0], n[1], n[2], u[0], u[1]))
                         newtri.append(len(oldindex2newindex))
                         oldindex2newindex[pt] = len(oldindex2newindex)
-                self.pmbuf.write("t %d %d %d\n" % (newtri[0], newtri[1], newtri[2]))
+                triangle_buffer.append("t %d %d %d\n" % (newtri[0], newtri[1], newtri[2]))
                 tri_mapping[oldtri] = cur_triangle
                 cur_triangle += 1
             else:
                 assert(False)
+        
+        #check for last operation
+        num_ops = len(vertex_buffer) + len(update_buffer) + len(triangle_buffer)
+        if num_ops > 0:
+            entire_op = "%d\n" % num_ops
+            for s in chain(vertex_buffer, triangle_buffer, update_buffer):
+                entire_op += s
+            operations_buffer.append(entire_op)
+        
+        self.pmbuf.write("PDAE\n")
+        self.pmbuf.write("%d\n" % len(operations_buffer))
+        for op in operations_buffer:
+            self.pmbuf.write(op)
+        operations_buffer = None
+        self.pmbuf.close()
         
         self.end_operation()
         
@@ -1895,6 +1930,19 @@ class SanderSimplify(object):
     def save_mesh(self):
         self.begin_operation('(Step 7 of 7) Saving mesh...')
         newmesh = collada.Collada()
+        newmesh.assetInfo.title = self.mesh.assetInfo.title
+        newmesh.assetInfo.subject = self.mesh.assetInfo.subject
+        newmesh.assetInfo.revision = self.mesh.assetInfo.revision
+        newmesh.assetInfo.keywords = self.mesh.assetInfo.keywords
+        newmesh.assetInfo.upaxis = self.mesh.assetInfo.upaxis
+        for contributor in self.mesh.assetInfo.contributors:
+            newcontributor = collada.asset.Contributor(contributor.author, contributor.authoring_tool,
+                                                       contributor.comments, contributor.copyright,
+                                                       contributor.source_data)
+            newmesh.assetInfo.contributors.append(newcontributor)
+        sander_contributor = collada.asset.Contributor(authoring_tool='meshtool',
+                                                       comments='Retextured and simplified base mesh using Texture Mapping Progressive Meshes, Sander et al.')
+        newmesh.assetInfo.contributors.append(sander_contributor)
         
         cimg = collada.material.CImage("sander-simplify-packed-atlas", "./atlas.jpg")
         imgout = StringIO()
