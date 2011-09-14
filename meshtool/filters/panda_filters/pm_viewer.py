@@ -7,8 +7,11 @@ from direct.gui.DirectGui import DirectButton, DirectSlider, OnscreenText
 from direct.showbase.ShowBase import ShowBase
 from panda3d.core import GeomNode, TransparencyAttrib, GeomVertexWriter
 from panda3d.core import GeomVertexReader, GeomVertexRewriter, TextNode
+from panda3d.core import Mat4
 import os
 import sys
+import numpy
+import collada
 
 uiArgs = { 'rolloverSound':None,
            'clickSound':None
@@ -59,12 +62,23 @@ class PandaPmViewer:
             print 'There is more than one geometry in the scene, so I think this is not a progressive base mesh.'
             sys.exit(1)
         
+        rotateNode = GeomNode("rotater")
+        rotatePath = render.attachNewNode(rotateNode)
+        matrix = numpy.identity(4)
+        if mesh.assetInfo.upaxis == collada.asset.UP_AXIS.X_UP:
+            r = collada.scene.RotateTransform(0,1,0,90)
+            matrix = r.matrix
+        elif mesh.assetInfo.upaxis == collada.asset.UP_AXIS.Y_UP:
+            r = collada.scene.RotateTransform(1,0,0,90)
+            matrix = r.matrix
+        rotatePath.setMat(Mat4(*matrix.T.flatten().tolist()))
+        
         geom, renderstate, mat4 = scene_members[0]
         node = GeomNode("primitive")
         node.addGeom(geom)
         if renderstate is not None:
             node.setGeomState(0, renderstate)
-        self.geomPath = render.attachNewNode(node)
+        self.geomPath = rotatePath.attachNewNode(node)
         self.geomPath.setMat(mat4)
             
         ensureCameraAt(self.geomPath, base.camera)
