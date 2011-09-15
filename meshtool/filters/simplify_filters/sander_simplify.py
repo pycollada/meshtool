@@ -23,7 +23,8 @@ import meshtool.filters
 import bisect
 
 try: import pyopencv as cv
-except ImportError:
+except ImportError, ex:
+    print >> sys.stderr, 'Warning: pyopencv not found, exception =', ex
     cv = None
 
 ImageFile.MAXBLOCK = 20*1024*1024 # default is 64k, setting to 20MB to handle large textures
@@ -422,6 +423,15 @@ class SanderSimplify(object):
         self.all_normal_indices = numpy.concatenate(self.all_normal_indices)
         self.all_orig_uv_indices = numpy.concatenate(self.all_orig_uv_indices) if len(self.all_orig_uv_indices) > 0 else numpy.array([], dtype=numpy.int32)
     
+    
+        #delete any triangles that have two identical vertices because they are useless
+        bad_tris = (self.all_vert_indices[:,0] == self.all_vert_indices[:,1]) | \
+                   (self.all_vert_indices[:,1] == self.all_vert_indices[:,2]) | \
+                   (self.all_vert_indices[:,0] == self.all_vert_indices[:,2])               
+        self.all_vert_indices = numpy.delete(self.all_vert_indices, numpy.where(bad_tris), axis=0)
+        self.all_normal_indices = numpy.delete(self.all_normal_indices, numpy.where(bad_tris), axis=0)
+        self.all_orig_uv_indices = numpy.delete(self.all_orig_uv_indices, numpy.where(bad_tris), axis=0)
+    
         assert(len(self.all_vert_indices) == len(self.all_normal_indices) == len(self.all_orig_uv_indices))
             
         self.end_operation()
@@ -644,7 +654,7 @@ class SanderSimplify(object):
             logrel = math.log(1 + error) / math.log(1 + self.maxerror)
             if logrel > MERGE_ERROR_THRESHOLD:
                 break
-            #print 'error', error, 'maxerror', maxerror, 'logrel', logrel, 'merged left', len(merge_priorities), 'numfaces', len(facegraph)
+            #print 'error', error, 'maxerror', self.maxerror, 'logrel', logrel, 'merged left', len(self.merge_priorities), 'numfaces', len(self.facegraph)
             
             newface = node_count
             node_count += 1
@@ -1774,9 +1784,6 @@ class SanderSimplify(object):
             self.new_uvs[chart_uvs,0] = (self.new_uvs[chart_uvs,0] * (w-0.5) + x) / width
             self.new_uvs[chart_uvs,1] = 1.0 - (( (1.0-self.new_uvs[chart_uvs,1]) * (h-0.5) + y ) / height)
 
-        #now that we are finished setting the uvs, we can uniqify it
-        self.new_uvs, self.new_uv_indices, self.old2newuvmap = uniqify_multidim_indexes(self.new_uvs, self.new_uv_indices, return_map=True)
-
         if cv is not None:
             #convert image and mask to opencv format
             cv_im = cv.Mat.from_pil_image(self.atlasimg)
@@ -1795,6 +1802,9 @@ class SanderSimplify(object):
     def split_base_and_pm(self):
         
         self.begin_operation('Creating progressive stream...')
+        
+        #first uniqify the uvs
+        self.new_uvs, self.new_uv_indices, self.old2newuvmap = uniqify_multidim_indexes(self.new_uvs, self.new_uv_indices, return_map=True)
         
         base_tris = numpy.array(list(self.tris_left), dtype=numpy.int32)
         tri_mapping = numpy.zeros(shape=(len(self.all_vert_indices),), dtype=numpy.int32)
@@ -1926,6 +1936,37 @@ class SanderSimplify(object):
         
         self.end_operation()
 
+    def add_back_pm(self):
+        self.begin_operation('Reconstructing full mesh because progressive stream is too small...')
+        
+        for operation in reversed(self.simplify_operations):
+            if operation == STREAM_OP.OPERATION_BOUNDARY:
+                pass
+            
+            elif operation[0] == STREAM_OP.INDEX_UPDATE:
+                op, tri_index, vert_index, changed_vert, changed_normal, changed_uv = operation
+                self.all_vert_indices[tri_index][vert_index] = changed_vert
+                self.all_normal_indices[tri_index][vert_index] = changed_normal
+                self.new_uv_indices[tri_index][vert_index] = changed_uv
+                
+            elif operation[0] == STREAM_OP.TRIANGLE_ADDITION:
+                pass
+        
+        self.end_operation()
+        
+        self.begin_operation('Compressing base mesh...')
+
+        #compress verts
+        self.all_vertices, self.all_vert_indices = uniqify_multidim_indexes(self.all_vertices, self.all_vert_indices)
+
+        #compress normals
+        self.all_normals, self.all_normal_indices = uniqify_multidim_indexes(self.all_normals, self.all_normal_indices)
+        
+        #compress uvs
+        self.new_uvs, self.new_uv_indices = uniqify_multidim_indexes(self.new_uvs, self.new_uv_indices)
+        
+        self.end_operation()
+
     def save_mesh(self):
         self.begin_operation('(Step 7 of 7) Saving mesh...')
         newmesh = collada.Collada()
@@ -2017,7 +2058,17 @@ class SanderSimplify(object):
         self.normalize_uvs()
         self.pack_charts()
         
-        self.split_base_and_pm()
+        self.orig_tri_count = len(self.all_vert_indices)
+        
+        #if the full resolution mesh is less than 10k tris
+        # or the stream is less than 20% of the total
+        # then don't bother with the stream at all
+        if self.orig_tri_count < 10000 or float(self.orig_tri_count - self.base_tri_count) / self.orig_tri_count < 0.20:
+            self.base_tri_count = self.orig_tri_count
+            self.add_back_pm()
+        else:
+            self.base_tri_count = len(self.tris_left)
+            self.split_base_and_pm()
         
         return self.save_mesh()
 
