@@ -6,6 +6,7 @@ from math import pi, sin, cos
 import Image
 import ImageOps
 from StringIO import StringIO
+import inspect
 
 from direct.task import Task
 from direct.showbase.ShowBase import ShowBase
@@ -24,6 +25,11 @@ from panda3d.core import AnimBundle, AnimGroup, AnimChannelMatrixXfmTable
 from panda3d.core import PTAFloat, CPTAFloat, AnimBundleNode, DepthOffsetAttrib
 from direct.actor.Actor import Actor
 from panda3d.core import loadPrcFileData
+
+#after numpy 1.3, unique1d was renamed to unique
+args, varargs, keywords, defaults = inspect.getargspec(numpy.unique)    
+if 'return_inverse' not in args:
+    numpy.unique = numpy.unique1d
 
 def getNodeFromController(controller, controlled_prim):
     if type(controlled_prim) is collada.controller.BoundSkinPrimitive:

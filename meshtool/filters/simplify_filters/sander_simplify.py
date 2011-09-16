@@ -22,6 +22,11 @@ from StringIO import StringIO
 import meshtool.filters
 import bisect
 
+#after numpy 1.3, unique1d was renamed to unique
+args, varargs, keywords, defaults = inspect.getargspec(numpy.unique)    
+if 'return_inverse' not in args:
+    numpy.unique = numpy.unique1d
+
 try: import pyopencv as cv
 except ImportError, ex:
     print >> sys.stderr, 'Warning: pyopencv not found, exception =', ex
