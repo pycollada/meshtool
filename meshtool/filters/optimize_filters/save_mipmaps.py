@@ -94,7 +94,10 @@ def getMipMaps(mesh):
                     cur_offset += 512
                     file_start = cur_offset
                     
-                    byte_ranges.append((file_start, file_len))
+                    byte_ranges.append({'offset':file_start,
+                                        'length':file_len,
+                                        'width':pil_img.size[0],
+                                        'height':pil_img.size[1]})
                     
                     #file lengths are rounded up to nearest 512 multiple
                     file_len = 512 * (int(file_len / 512.0) + 1)
