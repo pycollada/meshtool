@@ -372,10 +372,15 @@ class SanderSimplify(object):
                 if boundprim.vertex_index is None or len(boundprim.vertex_index) == 0:
                     continue
 
+                #any triangles that have two identical vertices are useless
+                bad_tris = (boundprim.vertex_index[:,0] == boundprim.vertex_index[:,1]) | \
+                           (boundprim.vertex_index[:,1] == boundprim.vertex_index[:,2]) | \
+                           (boundprim.vertex_index[:,0] == boundprim.vertex_index[:,2])
+
                 self.all_vertices.append(boundprim.vertex)
                 self.all_normals.append(boundprim.normal)
-                self.all_vert_indices.append(boundprim.vertex_index + self.vertex_offset)
-                self.all_normal_indices.append(boundprim.normal_index + self.normal_offset)
+                self.all_vert_indices.append(numpy.delete(boundprim.vertex_index, numpy.where(bad_tris), axis=0) + self.vertex_offset)
+                self.all_normal_indices.append(numpy.delete(boundprim.normal_index, numpy.where(bad_tris), axis=0) + self.normal_offset)
                 self.vertex_offset += len(boundprim.vertex)
                 self.normal_offset += len(boundprim.normal)
                 
@@ -415,13 +420,13 @@ class SanderSimplify(object):
                         texsource, texindex = uniqify_multidim_indexes(texsource, texindex)
                     
                     self.all_orig_uvs.append(texsource)
-                    self.all_orig_uv_indices.append(texindex + self.uv_offset)
+                    self.all_orig_uv_indices.append(numpy.delete(texindex, numpy.where(bad_tris), axis=0) + self.uv_offset)
                     self.uv_offset += len(texsource)
                 else:
-                    self.all_orig_uv_indices.append(numpy.zeros(shape=(len(boundprim.index), 3), dtype=numpy.int32))
+                    self.all_orig_uv_indices.append(numpy.zeros(shape=(len(boundprim.index)-numpy.sum(bad_tris), 3), dtype=numpy.int32))
                 
                 self.tri2material.append((self.index_offset, boundprim.material))
-                self.index_offset += len(boundprim.index)
+                self.index_offset += len(boundprim.index)-numpy.sum(bad_tris)
                 
         self.all_vertices = numpy.concatenate(self.all_vertices)
         self.all_normals = numpy.concatenate(self.all_normals)
@@ -429,15 +434,6 @@ class SanderSimplify(object):
         self.all_vert_indices = numpy.concatenate(self.all_vert_indices)
         self.all_normal_indices = numpy.concatenate(self.all_normal_indices)
         self.all_orig_uv_indices = numpy.concatenate(self.all_orig_uv_indices) if len(self.all_orig_uv_indices) > 0 else numpy.array([], dtype=numpy.int32)
-    
-    
-        #delete any triangles that have two identical vertices because they are useless
-        bad_tris = (self.all_vert_indices[:,0] == self.all_vert_indices[:,1]) | \
-                   (self.all_vert_indices[:,1] == self.all_vert_indices[:,2]) | \
-                   (self.all_vert_indices[:,0] == self.all_vert_indices[:,2])               
-        self.all_vert_indices = numpy.delete(self.all_vert_indices, numpy.where(bad_tris), axis=0)
-        self.all_normal_indices = numpy.delete(self.all_normal_indices, numpy.where(bad_tris), axis=0)
-        self.all_orig_uv_indices = numpy.delete(self.all_orig_uv_indices, numpy.where(bad_tris), axis=0)
     
         assert(len(self.all_vert_indices) == len(self.all_normal_indices) == len(self.all_orig_uv_indices))
             
