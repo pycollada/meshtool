@@ -2066,6 +2066,7 @@ class SanderSimplify(object):
         self.pack_charts()
         
         self.orig_tri_count = len(self.all_vert_indices)
+        self.base_tri_count = len(self.tris_left)
         
         #if the full resolution mesh is less than 10k tris
         # or the stream is less than 20% of the total
@@ -2074,7 +2075,6 @@ class SanderSimplify(object):
             self.base_tri_count = self.orig_tri_count
             self.add_back_pm()
         else:
-            self.base_tri_count = len(self.tris_left)
             self.split_base_and_pm()
         
         return self.save_mesh()
