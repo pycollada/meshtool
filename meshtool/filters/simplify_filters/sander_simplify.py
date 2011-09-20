@@ -897,7 +897,7 @@ class SanderSimplify(object):
                 straightened_path = astar_path(self.vertexgraph, start_path, end_path,
                                                heuristic=lambda x,y: v3dist(self.all_vertices[x], self.all_vertices[y]),
                                                weight='distance', subset=constrained_set, exclude=stop_nodes)
-            except nx.exception.NetworkXNoPath:
+            except nx.exception.NetworkXError:
                 continue
             
             # if we already have the shortest path, nothing to do

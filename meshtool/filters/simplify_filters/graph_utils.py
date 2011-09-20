@@ -117,7 +117,7 @@ def astar_path(G, source, target, heuristic=None, weight='weight', exclude=None,
             heappush(queue, (ncost + h, hash(neighbor), neighbor, 
                              ncost, curnode))
 
-    raise nx.NetworkXNoPath("Node %s not reachable from %s"%(source,target))
+    raise nx.exception.NetworkXError("Node %s not reachable from %s"%(source,target))
 
 
 def dfs_interior_nodes(G, starting, boundary, subset):
