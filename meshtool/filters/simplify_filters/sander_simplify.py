@@ -557,7 +557,9 @@ class SanderSimplify(object):
             else:
                 end_range = len(self.all_vert_indices)
             
-            if isinstance(mat.effect.diffuse, tuple):
+            if mat is None or mat.effect is None or mat.effect.diffuse is None:
+                diffuse = (0.5,0.5,0.5,1)
+            elif isinstance(mat.effect.diffuse, tuple):
                 diffuse = mat.effect.diffuse
             else:
                 diffuse = None
@@ -1264,12 +1266,14 @@ class SanderSimplify(object):
                 end_range = len(self.all_orig_uv_indices)
             
             if mat not in self.material2color:
-                if isinstance(mat.effect.diffuse, tuple):
+                if mat is None or mat.effect is None or mat.effect.diffuse is None:
+                    self.material2color[mat] = (0.5,0.5,0.5,1)
+                elif isinstance(mat.effect.diffuse, tuple):
                     self.material2color[mat] = mat.effect.diffuse
                 else:
                     self.material2color[mat] = mat.effect.diffuse.sampler.surface.image.pilimage
                     
-            if not isinstance(mat.effect.diffuse, tuple):
+            if mat is not None and mat.effect is not None and not isinstance(mat.effect.diffuse, tuple):
                 tri_uvs = self.all_orig_uvs[self.all_orig_uv_indices[i:end_range]]
                 tri_uvs[:,:,0] *= self.material2color[mat].size[0]
                 tri_uvs[:,:,1] *= self.material2color[mat].size[1]
