@@ -369,6 +369,8 @@ class SanderSimplify(object):
             if isinstance(boundgeom, collada.controller.BoundController):
                 boundgeom = boundgeom.geometry
             for boundprim in boundgeom.primitives():
+                if boundprim.vertex_index is None or len(boundprim.vertex_index) == 0:
+                    continue
 
                 self.all_vertices.append(boundprim.vertex)
                 self.all_normals.append(boundprim.normal)
