@@ -27,9 +27,16 @@ args, varargs, keywords, defaults = inspect.getargspec(numpy.unique)
 if 'return_inverse' not in args:
     numpy.unique = numpy.unique1d
 
-try: import pyopencv as cv
-except ImportError, ex:
-    print >> sys.stderr, 'Warning: pyopencv not found, exception =', ex
+# Import both cv (opencv's official python bindings)
+# and pyopencv, a python binding to cv that makes it
+# much easier to use. Mostly using pyopencv below, but
+# in some cases the inpaint function fails using pyopencv
+# so it gets used via the regular cv 
+try: import pyopencv as pcv
+except ImportError:
+    pcv = None
+try: import cv
+except ImportError:
     cv = None
 
 ImageFile.MAXBLOCK = 20*1024*1024 # default is 64k, setting to 20MB to handle large textures
@@ -279,13 +286,13 @@ def opencvblit(src_tri, dst_tri, src_cv_img, dst_pil_img):
     if sizex < 1 or sizey < 1:
         return
     
-    src_vec = cv.vector_Point2f([cv.Point2f(float(x),float(y)) for (x,y) in src_tri])
-    dst_vec = cv.vector_Point2f([cv.Point2f(float(x),float(y)) for (x,y) in [(y11,y12), (y21,y22), (y31,y32)]])
+    src_vec = pcv.vector_Point2f([pcv.Point2f(float(x),float(y)) for (x,y) in src_tri])
+    dst_vec = pcv.vector_Point2f([pcv.Point2f(float(x),float(y)) for (x,y) in [(y11,y12), (y21,y22), (y31,y32)]])
     
-    A = cv.getAffineTransform(src_vec, dst_vec)
+    A = pcv.getAffineTransform(src_vec, dst_vec)
     
-    transformed_im = cv.Mat()
-    cv.warpAffine(src_cv_img, transformed_im, A, cv.Size(sizex, sizey), cv.INTER_CUBIC, cv.BORDER_WRAP)
+    transformed_im = pcv.Mat()
+    pcv.warpAffine(src_cv_img, transformed_im, A, pcv.Size(sizex, sizey), pcv.INTER_CUBIC, pcv.BORDER_WRAP)
     
     transformed_im = transformed_im.to_pil_image()
     mask = Image.new('1', (sizex, sizey))
@@ -1375,10 +1382,10 @@ class SanderSimplify(object):
                 if bisect_loc >= len(self.tri2material) or tri != self.tri2material[bisect_loc][0]:
                     bisect_loc -= 1
                 diffuse_source = self.material2color[self.tri2material[bisect_loc][1]]
-                if cv is not None:
+                if pcv is not None:
                     cv_diffuse_source = self.pil_to_cv.get(diffuse_source)
                     if cv_diffuse_source is None:
-                        cv_diffuse_source = cv.Mat.from_pil_image(diffuse_source)
+                        cv_diffuse_source = pcv.Mat.from_pil_image(diffuse_source)
                         self.pil_to_cv[diffuse_source] = cv_diffuse_source
                 
                 prevuvs = self.all_orig_uvs[self.all_orig_uv_indices[tri]]
@@ -1386,7 +1393,7 @@ class SanderSimplify(object):
                 prevv = (1.0-prevuvs[:,1]) * diffuse_source.size[1]
                 prevtri = [(prevu[0], prevv[0]), (prevu[1], prevv[1]), (prevu[2], prevv[2])]
                 
-                if cv is None:
+                if pcv is None:
                     transformblit(prevtri, newtri, diffuse_source, chartim)
                 else:
                     #we prefer opencv because it allows us to wrap the texcoords
@@ -1761,8 +1768,9 @@ class SanderSimplify(object):
         self.begin_operation('(Step 6 of 7) Creating and packing charts into atlas...')
         self.atlasimg = Image.new('RGB', (self.chart_packing.width, self.chart_packing.height))
         atlasmask = Image.new('L', (self.chart_packing.width, self.chart_packing.height), 255)
+        
         for face_or_color, chartim in self.chart_ims.iteritems():
-            
+
             x,y,w,h = self.chart_packing.getPlacement(face_or_color)
             #adjust for 1 pixel border
             x += 1
@@ -1793,16 +1801,25 @@ class SanderSimplify(object):
 
         if cv is not None:
             #convert image and mask to opencv format
-            cv_im = cv.Mat.from_pil_image(self.atlasimg)
-            cv_mask = cv.Mat.from_pil_image(atlasmask)
-            cv_mask = cv_mask.reshape(1, cv_im.rows)
-    
+            cv_im = cv.CreateImageHeader(self.atlasimg.size, cv.IPL_DEPTH_8U, 3)
+            cv.SetData(cv_im, self.atlasimg.tostring())
+            cv_mask = cv.CreateImageHeader(atlasmask.size, cv.IPL_DEPTH_8U, 1)
+            cv.SetData(cv_mask, atlasmask.tostring())
+
             #do the inpainting
-            cv_painted_im = cv_im.clone()
-            cv.inpaint(cv_im, cv_mask, cv_painted_im, 3, cv.INPAINT_TELEA)
-    
+            cv_painted_im = cv.CloneImage(cv_im)
+            cv.Inpaint(cv_im, cv_mask, cv_painted_im, 3, cv.CV_INPAINT_TELEA)
+            
             #convert back to PIL
-            self.atlasimg = cv_painted_im.to_pil_image()
+            self.atlasimg = Image.fromstring("RGB", cv.GetSize(cv_painted_im), cv_painted_im.tostring())
+
+            # -- using pyopencv which has strange bugs
+            #cv_im = cv.Mat.from_pil_image(self.atlasimg)
+            #cv_mask = cv.Mat.from_pil_image(atlasmask)
+            #cv_mask = cv_mask.reshape(1, cv_im.rows)
+            #cv_painted_im = cv_im.clone()
+            #cv.inpaint(cv_im, cv_mask, cv_painted_im, 3, cv.INPAINT_TELEA)
+            #self.atlasimg = cv_painted_im.to_pil_image()
 
         self.end_operation()
 
