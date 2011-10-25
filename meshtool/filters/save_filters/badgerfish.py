@@ -1,80 +1,36 @@
 try:
-    import simplejson as json
-except ImportError:
     import json
+except ImportError:
+    import simplejson as json
 
-from lxml import etree
+from itertools import groupby
 
 def bare_tag(elem):
     return elem.tag.rsplit('}', 1)[-1]
-
-def is_node_badger_array(node):
-    if len(node) <= 1:
-        return False
-
-    for (a,b) in zip(node,node[1:]):
-        if a.tag != b.tag:
-            return False
-
-    return True
-
-def body_to_pod(xml):
-    is_arr = is_node_badger_array(xml)
-
-    if is_arr:
-        return {bare_tag(xml[0]): map(body_to_pod,xml)}
-    else:
-        obj = dict()
-
-        for (key,val) in xml.attrib.iteritems():
-            obj['@' + key] = val
-
-        for child in xml.iterchildren():
-            is_simple = (len(child) == 0 and len(child.attrib) == 0)
-            obj[bare_tag(child)] = child.text if is_simple else body_to_pod(child)
-
-        return obj
-
-def from_pod_body(data,parent):
-    elements = list()
-
-    if not isinstance(data,dict):
-        raise Exception('%s is not a dictionary!' % (data))
-
-    for (key,value) in data.iteritems():
-        if isinstance(value,list):                
-            for item in value:
-                itemEl = etree.Element(key)
-                itemEl.extend(from_pod_body(item,itemEl))
-                elements.append(itemEl)
-        elif isinstance(value,dict):       
-            itemEl = etree.Element(key)                                         
-            itemEl.extend(from_pod_body(value,itemEl))
-            elements.append(itemEl)
-        else:
-            if len(key) > 0 and key[0] == '@':
-                parent.attrib[key[1:]] = value
-            else:
-                itemEl = etree.Element(key)
-                itemEl.text = value
-                elements.append(itemEl)
-
-    return elements
-
-
-def from_pod(data):
-    els = from_pod_body(data,None)
     
-    if len(els) == 0:
-        raise Exception('Badgerfish json should be object on top level.')
-
-    return els[0]
-                
 def to_pod(xml):
-    return {bare_tag(xml): body_to_pod(xml)}
+    properties = {}
+    
+    #text of an element goes in $
+    if xml.text is not None:
+        properties['$'] = xml.text
+        
+    #attributes are prefixed with @
+    for (key, val) in xml.attrib.iteritems():
+        properties['@' + key] = val
+    
+    #children are entries keyed by their element name
+    # if multiple elements have the same name, they become an array
+    sorted_children = sorted([(bare_tag(e), e) for e in xml])
+    for key, group in groupby(sorted_children, key=lambda t: t[0]):
+        grouped_elements = list(group)
+        
+        if len(grouped_elements) > 1:
+            properties[key] = [to_pod(e) for k,e in grouped_elements]
+        else:
+            properties[key] = to_pod(grouped_elements[0][1])
+    
+    return properties
 
 def to_json(xml,**kargs):
-    return json.JSONEncoder(**kargs).encode(to_pod(xml))
-
-def from_json(json_data):
-    return from_pod(json.load(json_data))
+    return json.JSONEncoder(**kargs).encode({bare_tag(xml): to_pod(xml)})
