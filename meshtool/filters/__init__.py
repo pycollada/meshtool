@@ -15,9 +15,12 @@ import meshtool.filters.print_filters.print_scene
 import meshtool.filters.print_filters.print_render_info
 
 #Viewer
-import meshtool.filters.panda_filters.viewer
-import meshtool.filters.panda_filters.collada_viewer
-import meshtool.filters.panda_filters.pm_viewer
+try:
+    import meshtool.filters.panda_filters.viewer
+    import meshtool.filters.panda_filters.collada_viewer
+    import meshtool.filters.panda_filters.pm_viewer
+except:
+    pass
 
 #Optimizations
 import meshtool.filters.optimize_filters.combine_effects
@@ -48,8 +51,11 @@ import meshtool.filters.meta_filters.medium_optimizations
 import meshtool.filters.meta_filters.full_optimizations
 
 #Save filters last
-import meshtool.filters.panda_filters.save_screenshot
-import meshtool.filters.panda_filters.save_rotate_screenshots
+try:
+    import meshtool.filters.panda_filters.save_screenshot
+    import meshtool.filters.panda_filters.save_rotate_screenshots
+except:
+    pass
 import meshtool.filters.save_filters.save_collada
 import meshtool.filters.save_filters.save_collada_zip
 import meshtool.filters.save_filters.save_badgerfish
