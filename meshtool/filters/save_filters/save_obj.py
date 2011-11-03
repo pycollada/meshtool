@@ -67,7 +67,7 @@ def FilterGenerator():
             fmtl.close()
 
             f = open(filename, 'w')
-            print >>f, "mtllib", mtlfilename
+            print >>f, "mtllib", os.path.relpath(mtlfilename, os.path.dirname(filename))
 
             # Iterate through all primitives in each geometry instance
             vert_offset = 1
