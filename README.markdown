@@ -18,6 +18,9 @@ Save
 * ``--save_collada file`` - Saves a collada file
 * ``--save_collada_zip file`` - Saves a collada file and textures in a zip file.
 Normalizes texture paths.
+* ``--save_badgerfish file`` - Saves a collada file as JSON badgerfish
+* ``--save_ply file`` - Saves a collada model in PLY format
+* ``--save_obj file mtlfilename`` - Saves a mesh as an OBJ file
 
 Metafilters
 -----------
