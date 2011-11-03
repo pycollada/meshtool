@@ -8,11 +8,66 @@ def FilterGenerator():
         def __init__(self):
             super(ObjSaveFilter, self).__init__('save_obj', 'Saves a mesh as an OBJ file')
 
-        def apply(self, mesh, filename):
+            self.arguments.append(FileArgument(
+                    'mtlfilename', 'Where to save the material properties'))
+
+        @staticmethod
+        def materialParameterAsFloat(value, default=None):
+            if isinstance(value, collada.material.Map):
+                return default
+            elif isinstance(value, tuple):
+                return sum(value)/float(len(value))
+            elif isinstance(value, float):
+                return value
+            else:
+                return default
+
+        @staticmethod
+        def formatMaterialField(field_name, value):
+            if isinstance(value, collada.material.Map):
+                return "map_%s %s" % (field_name, value.sampler.surface.image.path)
+            elif isinstance(value, tuple):
+                return "%s %f %f %f" % (field_name, value[0], value[1], value[2])
+            elif isinstance(value, float):
+                return "%s %f" % (field_name, value)
+            else:
+                return None
+
+
+        def apply(self, mesh, filename, mtlfilename):
             if os.path.exists(filename):
-                raise FilterException("specified filename already exists")
+                raise FilterException("Specified mesh filename already exists")
+
+            if os.path.exists(mtlfilename):
+                raise FilterException("Specified material filename already exists")
+
+            # Handle materials first, iterating through all materials
+            fmtl = open(mtlfilename, 'w')
+            for mtl in mesh.materials:
+                print >>fmtl, "newmtl", mtl.id
+                if mtl.effect.ambient is not None:
+                    print >>fmtl, ObjSaveFilter.formatMaterialField('Ka', mtl.effect.ambient)
+                if mtl.effect.diffuse is not None:
+                    print >>fmtl, ObjSaveFilter.formatMaterialField('Kd', mtl.effect.diffuse)
+                if mtl.effect.specular is not None:
+                    print >>fmtl, ObjSaveFilter.formatMaterialField('Ks', mtl.effect.specular)
+                if mtl.effect.shininess is not None:
+                    print >>fmtl, ObjSaveFilter.formatMaterialField('Ns', mtl.effect.shininess)
+                # d and Tr are both used for transparency
+                if mtl.effect.transparent is not None:
+                    transparent_float = ObjSaveFilter.materialParameterAsFloat(mtl.effect.transparent, default=1.0)
+                    print >>fmtl, ObjSaveFilter.formatMaterialField('d', transparent_float)
+                    print >>fmtl, ObjSaveFilter.formatMaterialField('Tr', transparent_float)
+
+                # Illumination model: 1 = diffuse, 2 = with specular
+                illum_model = 1 if mtl.effect.shadingtype in ['lambert', 'constant'] else 2
+                print >>fmtl, "illum", illum_model
+
+                print >>fmtl
+            fmtl.close()
 
             f = open(filename, 'w')
+            print >>f, "mtllib", mtlfilename
 
             # Iterate through all primitives in each geometry instance
             vert_offset = 1
@@ -38,6 +93,9 @@ def FilterGenerator():
                             v = boundprim.texcoordset[0][vi,:]
                             print >>f, "vt %f %f" % (v[0], v[1])
 
+                    # Start using the right material
+                    print >>f, "usemtl", boundprim.material.id
+
                     # Write transformed primitives
                     for face in boundprim:
                         print >>f, "f ",
@@ -58,6 +116,7 @@ def FilterGenerator():
                         norm_offset += boundprim.normal.shape[0]
                     if boundprim.texcoordset is not None:
                         tc_offset += boundprim.texcoordset[0].shape[0]
+
             f.close()
 
             return mesh
