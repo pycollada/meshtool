@@ -7,6 +7,7 @@ import Image
 import ImageOps
 from StringIO import StringIO
 import inspect
+import math
 
 from direct.task import Task
 from direct.showbase.ShowBase import ShowBase
@@ -509,15 +510,31 @@ def destroyScene(render):
 
 def ensureCameraAt(nodePath, cam):
     if not nodePath.isEmpty():
+        
+        parentNP = nodePath.getParent()
+        nodePath.detachNode()
+        nodePath.setName('wrapper-centering-collada')
+        wrapNode = parentNP.attachNewNode('collada')
+        nodePath.reparentTo(wrapNode)
+        
         boundingSphere = nodePath.getBounds()
         if not boundingSphere.isEmpty():
-            scale = 500 / boundingSphere.getRadius()
+            
+            minPt, maxPt = nodePath.getTightBounds()
+            scalex = math.fabs(maxPt.getX() - minPt.getX())
+            scaley = math.fabs(maxPt.getY() - minPt.getY())
+            scalez = math.fabs(maxPt.getZ() - minPt.getZ())
+            
+            scale = 1000.0 / max(scalex, scaley, scalez)
             
             nodePath.setScale(scale, scale, scale)
-            boundingSphere = nodePath.getBounds()
-            nodePath.setPos(-1 * boundingSphere.getCenter().getX(),
-                            -1 * boundingSphere.getCenter().getY(),
-                            -1 * boundingSphere.getCenter().getZ())
+
+            minPt, maxPt = nodePath.getTightBounds()
+            centerPt = (maxPt + minPt) * 0.5
+            nodePath.setPos(-1 * centerPt.getX(),
+                            -1 * centerPt.getY(),
+                            -1 * centerPt.getZ())
+
             nodePath.setHpr(0,0,0)
        
     cam.setPos(1500, -1500, 1)
