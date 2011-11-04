@@ -9,15 +9,18 @@ def FilterGenerator():
         def __init__(self):
             super(ObjSaveFilter, self).__init__('save_obj', 'Saves a mesh as an OBJ file')
 
-            self.arguments.append(FileArgument(
-                    'mtlfilename', 'Where to save the material properties'))
-
-        def apply(self, mesh, filename, mtlfilename):
+        def apply(self, mesh, filename):
             if os.path.exists(filename):
                 raise FilterException("Specified mesh filename already exists")
 
+            dotloc = filename.rfind('.')
+            if dotloc == -1:
+                mtlfilename = filename
+            else:
+                mtlfilename = filename[:dotloc]
+            mtlfilename += '.mtl'
             if os.path.exists(mtlfilename):
-                raise FilterException("Specified material filename already exists")
+                raise FilterException("Material filename already exists")
 
             # Handle materials first, iterating through all materials
             fmtl = open(mtlfilename, 'w')
