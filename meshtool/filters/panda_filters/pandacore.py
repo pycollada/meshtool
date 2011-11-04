@@ -509,6 +509,8 @@ def destroyScene(render):
     base.graphicsEngine.removeAllWindows()
 
 def ensureCameraAt(nodePath, cam):
+    wrapNode = None
+    
     if not nodePath.isEmpty():
         
         parentNP = nodePath.getParent()
@@ -536,9 +538,13 @@ def ensureCameraAt(nodePath, cam):
                             -1 * centerPt.getZ())
 
             nodePath.setHpr(0,0,0)
-       
+    
     cam.setPos(1500, -1500, 1)
     cam.lookAt(0.0, 0.0, 0.0)
+    
+    if wrapNode is not None:
+        return wrapNode
+    return nodePath
 
 def getGeomFromPrim(prim, matstate):
     if type(prim) is collada.triangleset.TriangleSet:

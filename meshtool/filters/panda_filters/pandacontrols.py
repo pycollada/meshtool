@@ -68,6 +68,40 @@ class KeyboardMovement(DirectObject):
         self.cam_p += scale * p
         self.cam_r += scale * r
 
+class MouseCamera(DirectObject):
+    def __init__(self):
+        
+        #The scale of the rotation relative to the mouse coords
+        self.SCALE = 25
+
+        self.accept("mouse3", self.down)
+        self.accept("mouse3-up", self.up)
+        
+    def down(self):
+        if not base.mouseWatcherNode.hasMouse():
+            return
+
+        self.initialMouseCoord = (base.mouseWatcherNode.getMouseX(), base.mouseWatcherNode.getMouseY())
+        self.initialH = base.cam.getH()
+        self.initialP = base.cam.getP()
+        
+        taskMgr.add(self.drag, "rightdrag")
+    
+    def drag(self, task):
+        if not base.mouseWatcherNode.hasMouse():
+            return Task.cont
+        
+        curMouseCoord = (base.mouseWatcherNode.getMouseX(), base.mouseWatcherNode.getMouseY())
+        delta = (curMouseCoord[0] - self.initialMouseCoord[0], curMouseCoord[1] - self.initialMouseCoord[1])
+        
+        base.cam.setH(self.initialH + -1 * self.SCALE * delta[0])
+        base.cam.setP(self.initialP + self.SCALE * delta[1])
+        
+        return Task.cont
+    
+    def up(self):
+        taskMgr.remove("rightdrag")
+
 class MouseDrag(DirectObject):
     def __init__(self, node):
         

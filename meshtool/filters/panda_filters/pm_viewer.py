@@ -2,7 +2,7 @@ from meshtool.args import *
 from meshtool.filters.base_filters import *
 
 from pandacore import getSceneMembers, ensureCameraAt, attachLights
-from pandacontrols import KeyboardMovement, MouseDrag, MouseScaleZoom
+from pandacontrols import KeyboardMovement, MouseDrag, MouseScaleZoom, MouseCamera
 from direct.gui.DirectGui import DirectButton, DirectSlider, OnscreenText
 from direct.showbase.ShowBase import ShowBase
 from panda3d.core import GeomNode, TransparencyAttrib, GeomVertexWriter
@@ -49,7 +49,7 @@ class PandaPmViewer:
         self.geomPath = rotatePath.attachNewNode(node)
         self.geomPath.setMat(mat4)
             
-        ensureCameraAt(self.geomPath, base.camera)
+        wrappedNode = ensureCameraAt(self.geomPath, base.camera)
         base.disableMouse()
         attachLights(render)
         render.setShaderAuto()
@@ -57,8 +57,9 @@ class PandaPmViewer:
     
         base.render.analyze()
         KeyboardMovement()
-        MouseDrag(self.geomPath)
-        MouseScaleZoom(self.geomPath)
+        MouseDrag(wrappedNode)
+        MouseScaleZoom(wrappedNode)
+        MouseCamera()
         
         print 'Loading pm into memory... ',
         sys.stdout.flush()
