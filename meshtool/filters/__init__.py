@@ -61,3 +61,4 @@ import meshtool.filters.save_filters.save_collada_zip
 import meshtool.filters.save_filters.save_badgerfish
 import meshtool.filters.save_filters.save_ply
 import meshtool.filters.save_filters.save_obj
+import meshtool.filters.save_filters.save_obj_zip

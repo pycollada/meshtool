@@ -21,6 +21,7 @@ Normalizes texture paths.
 * ``--save_badgerfish file`` - Saves a collada file as JSON badgerfish
 * ``--save_ply file`` - Saves a collada model in PLY format
 * ``--save_obj file mtlfilename`` - Saves a mesh as an OBJ file
+* ``--save_obj_zip file`` - Saves an OBJ file and textures in a zip file.
 
 Metafilters
 -----------
