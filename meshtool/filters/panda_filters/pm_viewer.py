@@ -12,43 +12,11 @@ import os
 import sys
 import numpy
 import collada
+from pdae_utils import PM_OP, readPDAE
 
 uiArgs = { 'rolloverSound':None,
            'clickSound':None
         }
-
-class PM_OP:
-    INDEX_UPDATE = 1
-    TRIANGLE_ADDITION = 2
-    VERTEX_ADDITION = 3
-    
-def readPm(pm_filebuf):
-    pdae_line = pm_filebuf.readline().strip()
-    if pdae_line != 'PDAE':
-        print >> sys.stderr, 'Progressive mesh file given does not have a valid PDAE header'
-        sys.exit(1)
-    
-    num_refinements = int(pm_filebuf.readline().strip())
-
-    pm_refinements = []
-    for refinement_index in range(num_refinements):
-        num_operations = int(pm_filebuf.readline().strip())
-        refinement_ops = []
-        for operation_index in range(num_operations):
-            vals = pm_filebuf.readline().strip().split()
-            op = vals.pop(0)
-            if op == 't':
-                v1, v2, v3 = map(int, vals)
-                refinement_ops.append((PM_OP.TRIANGLE_ADDITION, v1, v2, v3))
-            elif op == 'u':
-                tindex, vindex = map(int, vals)
-                refinement_ops.append((PM_OP.INDEX_UPDATE, tindex, vindex))
-            elif op == 'v':
-                vx, vy, vz, nx, ny, nz, s, t = map(float, vals)
-                refinement_ops.append((PM_OP.VERTEX_ADDITION, vx, vy, vz, nx, ny, nz, s, t))
-        pm_refinements.append(refinement_ops)
-
-    return pm_refinements
 
 class PandaPmViewer:
     
@@ -94,7 +62,7 @@ class PandaPmViewer:
         
         print 'Loading pm into memory... ',
         sys.stdout.flush()
-        self.pm_refinements = readPm(pm_filebuf)
+        self.pm_refinements = readPDAE(pm_filebuf)
         self.pm_index = 0
         print 'Done'
 
