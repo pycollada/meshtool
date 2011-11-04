@@ -24,7 +24,7 @@ def FilterGenerator():
 
             # Handle materials first, iterating through all materials
             fmtl = open(mtlfilename, 'w')
-            save_obj_util.write_mtl(mesh, fmtl)
+            save_obj_util.write_mtl(mesh, fmtl, mtlfilename)
             fmtl.close()
 
             f = open(filename, 'w')

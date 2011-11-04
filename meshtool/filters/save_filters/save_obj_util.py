@@ -1,4 +1,5 @@
 import collada
+import os.path
 
 def materialParameterAsFloat(value, default=None):
     if isinstance(value, collada.material.Map):
@@ -10,9 +11,22 @@ def materialParameterAsFloat(value, default=None):
     else:
         return default
 
-def formatMaterialField(field_name, value):
+def formatMaterialField(field_name, value, mesh=None, mtlfilename=None):
     if isinstance(value, collada.material.Map):
-        return "map_%s %s" % (field_name, value.sampler.surface.image.path)
+        rel_img_path = value.sampler.surface.image.path
+        # This let's relative paths get worked out, but since
+        # sometimes this data is not going into files (e.g. when it's
+        # going into a zip), this approach only works sometimes. For
+        # other situations, like zips, you are responsible for making
+        # sure the path is setup properly.
+        if mesh is not None and mesh.filename is not None and mtlfilename is not None:
+            # First we need to get the real relative path to the
+            # texture by combining relative path to source dae +
+            # relative path from dae to texture
+            rel_img_path = os.path.join( os.path.dirname(mesh.filename), rel_img_path )
+            # Then, use that to convert it to be relative to the mtl file.
+            rel_img_path = os.path.relpath(rel_img_path, os.path.dirname(mtlfilename))
+        return "map_%s %s" % (field_name, rel_img_path)
     elif isinstance(value, tuple):
         return "%s %f %f %f" % (field_name, value[0], value[1], value[2])
     elif isinstance(value, float):
@@ -21,24 +35,33 @@ def formatMaterialField(field_name, value):
         return None
 
 
-def write_mtl(mesh, fmtl):
-    """Write Wavefront OBJ-style materials to a file-like object."""
+def write_mtl(mesh, fmtl, mtlfilename=None):
+    """Write Wavefront OBJ-style materials to a file-like object.
+
+    :param collada.Collada mesh:
+      The collada mesh to get materials from
+    :param fmtl:
+      A file-like object to write material information to.
+    :param str mtlfilename:
+      The path to the material file being written, if it is truly a
+      file. This is used to ensure paths to textures are correct.
+    """
 
     for mtl in mesh.materials:
         print >>fmtl, "newmtl", mtl.id
         if mtl.effect.ambient is not None:
-            print >>fmtl, formatMaterialField('Ka', mtl.effect.ambient)
+            print >>fmtl, formatMaterialField('Ka', mtl.effect.ambient, mesh, mtlfilename)
         if mtl.effect.diffuse is not None:
-            print >>fmtl, formatMaterialField('Kd', mtl.effect.diffuse)
+            print >>fmtl, formatMaterialField('Kd', mtl.effect.diffuse, mesh, mtlfilename)
         if mtl.effect.specular is not None:
-            print >>fmtl, formatMaterialField('Ks', mtl.effect.specular)
+            print >>fmtl, formatMaterialField('Ks', mtl.effect.specular, mesh, mtlfilename)
         if mtl.effect.shininess is not None:
-            print >>fmtl, formatMaterialField('Ns', mtl.effect.shininess)
+            print >>fmtl, formatMaterialField('Ns', mtl.effect.shininess, mesh, mtlfilename)
         # d and Tr are both used for transparency
         if mtl.effect.transparent is not None:
             transparent_float = materialParameterAsFloat(mtl.effect.transparent, default=1.0)
-            print >>fmtl, formatMaterialField('d', transparent_float)
-            print >>fmtl, formatMaterialField('Tr', transparent_float)
+            print >>fmtl, formatMaterialField('d', transparent_float, mesh, mtlfilename)
+            print >>fmtl, formatMaterialField('Tr', transparent_float, mesh, mtlfilename)
 
         # Illumination model: 1 = diffuse, 2 = with specular
         illum_model = 1 if mtl.effect.shadingtype in ['lambert', 'constant'] else 2
