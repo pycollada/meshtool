@@ -96,6 +96,7 @@ triangleset indices
 Mesh Simplification
 -------------------
 * ``--sander_simplify pm_file`` - Simplifies the mesh based on sandler, et al. method.
+* ``--add_back_pm pm_file percent`` - Adds back mesh data from a progressive PDAE file
 
 Texture Operations
 ------------------

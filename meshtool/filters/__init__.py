@@ -66,6 +66,8 @@ except ImportError: pass
 #Simplification
 try: import meshtool.filters.simplify_filters.sander_simplify
 except ImportError: pass
+try: import meshtool.filters.simplify_filters.add_back_pm
+except ImportError: pass
 
 #Meta filters
 try: import meshtool.filters.meta_filters.medium_optimizations
