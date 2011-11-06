@@ -95,11 +95,6 @@ triangleset indices
 
 Mesh Simplification
 -------------------
-* ``--simplify percent filename`` - Uses mesh simplificaiton algorithm to remove
-vertex information from the mesh. Removes percent percentage of the vertices and
-saves our the results into filename. The file can be loaded with --load_pm.
-* ``--load_pm percent filename`` - Loads percent percentage of the extra vertex
-information from filename (saved with --simplify) back into the loaded mesh.
 * ``--sander_simplify pm_file`` - Simplifies the mesh based on sandler, et al. method.
 
 Texture Operations
