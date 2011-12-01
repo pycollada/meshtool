@@ -1,5 +1,6 @@
 import collada
 import os.path
+from itertools import izip, chain
 
 def materialParameterAsFloat(value, default=None):
     if isinstance(value, collada.material.Map):
@@ -73,14 +74,14 @@ def write_mtl(mesh, fmtl, mtlfilename=None):
 def write_obj(mesh, mtlfilename, f):
     """Write Wavefront OBJ contents of mesh to a file-like object."""
 
-    print >>f, "mtllib", mtlfilename
+    f.write("mtllib %s\n" % mtlfilename)
 
     # Iterate through all primitives in each geometry instance
     vert_offset = 1
     norm_offset = 1
     tc_offset = 1
     for boundgeom in mesh.scene.objects('geometry'):
-        print >>f, "# %s - %s" % (boundgeom.original.name, boundgeom.original.id)
+        f.write("# %s - %s\n" % (boundgeom.original.name, boundgeom.original.id))
         for boundprim in boundgeom.primitives():
             # Determine the properties of these primitives we're going
             # to use
@@ -90,36 +91,36 @@ def write_obj(mesh, mtlfilename, f):
                 raise FilterException("OBJ only supports one texture coordinate set.")
 
             # Write transformed vertices, normals, texcoords
-            for vi in range(boundprim.vertex.shape[0]):
-                v = boundprim.vertex[vi,:]
-                print >>f, "v %f %f %f" % (v[0], v[1], v[2])
+            f.write("\n".join(map(lambda vert: 'v %.7g %.7g %.7g' % tuple(vert), boundprim.vertex.tolist())))
+            f.write("\n")
 
             if emit_normals:
-                for vi in range(boundprim.normal.shape[0]):
-                    v = boundprim.normal[vi,:]
-                    print >>f, "vn %f %f %f" % (v[0], v[1], v[2])
+                f.write("\n".join(map(lambda norm: 'vn %.7g %.7g %.7g' % tuple(norm), boundprim.normal.tolist())))
+                f.write("\n")
 
             if emit_texcoords:
-                for vi in range(boundprim.texcoordset[0].shape[0]):
-                    v = boundprim.texcoordset[0][vi,:]
-                    print >>f, "vt %f %f" % (v[0], v[1])
+                f.write("\n".join(map(lambda uv: 'vt %.7g %.7g' % tuple(uv), boundprim.texcoordset[0].tolist())))
+                f.write("\n")
 
             # Start using the right material
-            print >>f, "usemtl", boundprim.material.id
+            f.write("usemtl %s\n" % boundprim.material.id)
+
+            if emit_normals and emit_texcoords:
+                format_string = "f %d/%d/%d %d/%d/%d %d/%d/%d"
+                index_iter = izip(boundprim.vertex_index+vert_offset, boundprim.texcoord_indexset[0]+tc_offset, boundprim.normal_index+norm_offset)
+            elif emit_normals:
+                format_string = "f %d//%d %d//%d %d//%d"
+                index_iter = izip(boundprim.vertex_index+vert_offset, boundprim.normal_index+norm_offset)
+            elif emit_texcoords:
+                format_string = "f %d/%d %d/%d %d/%d"
+                index_iter = izip(boundprim.vertex_index+vert_offset, boundprim.texcoord_indexset[0]+tc_offset)
+            else:
+                format_string = "f %d %d %d"
+                index_iter = izip(boundprim.vertex_index+vert_offset)
 
             # Write transformed primitives
-            for face in boundprim:
-                print >>f, "f ",
-                if emit_normals and emit_texcoords:
-                    for vidx,nidx,tcidx in zip(face.indices,face.normal_indices,face.texcoord_indices[0]):
-                        print >>f, "%d/%d/%d " % (vidx + vert_offset, tcidx + tc_offset, nidx + norm_offset),
-                elif emit_normals:
-                    for vidx,nidx in zip(face.indices,face.normal_indices):
-                        print >>f, "%d//%d " % (vidx + vert_offset, nidx + norm_offset),
-                else:
-                    for vidx in face.indices:
-                        print >>f, "%d " % (vidx + vert_offset),
-                print >>f
+            f.write("\n".join(map(lambda idx: format_string % tuple(chain.from_iterable(zip(*idx))), index_iter)))
+            f.write("\n")
 
             # Finally, update offsets
             vert_offset += boundprim.vertex.shape[0]
@@ -127,3 +128,6 @@ def write_obj(mesh, mtlfilename, f):
                 norm_offset += boundprim.normal.shape[0]
             if emit_texcoords:
                 tc_offset += boundprim.texcoordset[0].shape[0]
+
+    f.write("\n")
+    
