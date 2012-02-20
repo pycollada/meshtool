@@ -5,12 +5,12 @@ import sys
 from math import pi
 
 class KeyboardMovement(DirectObject):
-    def __init__(self):
+    def __init__(self, scale=1.0):
 
         #Controls how fast movement is        
-        self.POS_SPEED = 1000
+        self.POS_SPEED = 1000 * scale
         #Controls how fast camera movement is
-        self.CAM_SPEED = 5
+        self.CAM_SPEED = 5 * scale
         
         #initial values for movement of the camera
         self.cam_pos_x = 0
