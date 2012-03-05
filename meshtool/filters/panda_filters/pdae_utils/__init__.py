@@ -12,6 +12,11 @@ except ImportError:
     import StringIO
 CURDIR = os.path.abspath(os.path.dirname(__file__))
 
+class PM_OP:
+    INDEX_UPDATE = 1
+    TRIANGLE_ADDITION = 2
+    VERTEX_ADDITION = 3
+
 class PDAETest(unittest.TestCase):
     def testLoad(self):
         for i in range(4):
