@@ -1,6 +1,9 @@
 import sys
 import struct
-from StringIO import StringIO
+try:
+    from cStringIO import StringIO
+except ImportError:
+    from StringIO import StringIO
 
 class PM_OP:
     INDEX_UPDATE = 1
@@ -63,7 +66,7 @@ def readPDAEPartial(data, refinements_read, num_refinements):
         num_operations = readPDAEnumops(fakebuf)
         lines_left -= 1
         
-        if lines_left < num_operations+5:
+        if lines_left < num_operations:
             break
 
         refinement_ops = readPDAErefinement(fakebuf, num_operations)
