@@ -100,7 +100,7 @@ def getMipMaps(mesh):
                                         'height':pil_img.size[1]})
                     
                     #file lengths are rounded up to nearest 512 multiple
-                    file_len = 512 * (int(file_len / 512.0) + 1)
+                    file_len = 512 * ((file_len + 512 - 1) / 512)
                     cur_offset += file_len
                 
                 tar.close()
