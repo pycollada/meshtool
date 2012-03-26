@@ -22,36 +22,32 @@ cdef int readPDAEnumops(pm_filebuf):
     line = pm_filebuf.readline()
     cdef char* lineptr = line
     return strtol(lineptr, NULL, 10)
-    #return int(pm_filebuf.readline())
 
 cdef list readPDAErefinement(pm_filebuf, int num_operations):
     cdef list refinement_ops
     cdef int operation_index
     cdef char op
     cdef list vals
-    cdef int t1, t2, t3
-    cdef int u1, u2, u3
+    cdef long int t1, t2, t3
+    cdef long int u1, u2, u3
     cdef float f1, f2, f3, f4, f5, f6, f7, f8
-    
-    #cdef char[500] line
+
     cdef char* line
     cdef char* ptr
     cdef char** ptrptr = &ptr
     
     refinement_ops = []
     for operation_index in range(num_operations):
-        #vals = pm_filebuf.readline().strip().split()
-        #fgets(line, 500, f)
         str = pm_filebuf.readline()
         line = str
         op = line[0]
         if op == b't':
-            t1 = strtol(line, ptrptr, 10)
+            t1 = strtol(line+1, ptrptr, 10)
             t2 = strtol(ptr, ptrptr, 10)
             t3 = strtol(ptr, ptrptr, 10)
             refinement_ops.append((TRIANGLE_ADDITION, t1, t2, t3))
         elif op == b'u':
-            u1 = strtol(line, ptrptr, 10)
+            u1 = strtol(line+1, ptrptr, 10)
             u2 = strtol(ptr, ptrptr, 10)
             refinement_ops.append((INDEX_UPDATE, u1, u2))
         elif op == b'v':
