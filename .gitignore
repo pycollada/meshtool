@@ -6,3 +6,4 @@ build
 meshtool.egg-info
 meshtool/filters/panda_filters/pdae_utils/pdae_cython.c
 meshtool/filters/panda_filters/pdae_utils/pdae_cython.so
+.DS_Store
