@@ -94,3 +94,5 @@ try: import meshtool.filters.save_filters.save_obj
 except ImportError: pass
 try: import meshtool.filters.save_filters.save_obj_zip
 except ImportError: pass
+try: import meshtool.filters.save_filters.save_bam
+except ImportError: pass
