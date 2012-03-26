@@ -4,4 +4,4 @@
 dist
 build
 meshtool.egg-info
-
+.DS_Store

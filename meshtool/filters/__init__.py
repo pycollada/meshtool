@@ -6,6 +6,8 @@ factory = FilterFactory()
 #Load filters first
 try: import meshtool.filters.load_filters.load_collada
 except ImportError: pass
+try: import meshtool.filters.load_filters.load_obj
+except ImportError: pass
 
 #Print filters
 try: import meshtool.filters.print_filters.print_textures
