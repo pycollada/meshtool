@@ -26,6 +26,8 @@ def to_json(o, level=0):
         ret += '"' + o + '"'
     elif isinstance(o, list):
         ret += "[" + ",".join([to_json(e, level+1) for e in o]) + "]"
+    elif isinstance(o, bool):
+        ret += "true" if o else "false"
     elif isinstance(o, int):
         ret += str(o)
     elif isinstance(o, float):
@@ -140,6 +142,34 @@ def getEmbeds(mesh):
     
     return embeds
 
+def getObjects(mesh):
+    objects = {}
+    
+    matrix = numpy.identity(4)
+    if mesh.assetInfo.upaxis == collada.asset.UP_AXIS.X_UP:
+        r = collada.scene.RotateTransform(0,1,0,-90)
+        matrix = r.matrix
+    elif mesh.assetInfo.upaxis == collada.asset.UP_AXIS.Z_UP:
+        r = collada.scene.RotateTransform(1,0,0,-90)
+        matrix = r.matrix
+    
+    if mesh.scene is not None:
+        for boundgeom in mesh.scene.objects('geometry'):
+            for prim_num, boundprim in enumerate(boundgeom.primitives()):
+                attrs = {}
+                geom_name = "%s-primitive-%d" % (boundgeom.original.id, prim_num)
+                attrs['geometry'] = geom_name
+                attrs['materials'] = []
+                if boundprim.material is not None:
+                    attrs['materials'].append(boundprim.material.id)
+                
+                attrs["matrix"] = numpy.dot(matrix, boundgeom.matrix)
+                attrs["visible"] = True
+                    
+                objects[geom_name] = attrs
+    
+    return objects
+
 def FilterGenerator():
     class ThreeJsSceneSaveFilter(SaveFilter):
         def __init__(self):
@@ -155,7 +185,7 @@ def FilterGenerator():
             outdict['metadata'] = {'formatVersion': 3,
                                    'type': 'scene'}
             outdict['defaults'] = {'bgcolor': numpy.array([0,0,0], dtype=int)}
-            outdict['objects'] = {}
+            outdict['objects'] = getObjects(mesh)
             outdict['embeds'] = getEmbeds(mesh)
             outdict['geometries'] = {}
             for embed_name in outdict['embeds'].keys():
