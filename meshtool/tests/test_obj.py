@@ -91,6 +91,13 @@ class ObjTester(unittest.TestCase):
         self.assertEqual(len(texdata), 9288)
         self.assertEqual(texdata, blessed_data)
         
+        image_paths = [cimg.path for cimg in col.images]
+        self.assertIn('./engineflare1.jpg', image_paths)
+        self.assertIn('./wal67ar_small.jpg', image_paths)
+        self.assertIn('./wal69ar_small.jpg', image_paths)
+        self.assertIn('./SpiderTex.jpg', image_paths)
+        self.assertIn('./drkwood2.jpg', image_paths)
+        
         col.save()
 
     def test_regr01(self):

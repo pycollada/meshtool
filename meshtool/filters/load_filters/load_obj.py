@@ -121,7 +121,7 @@ def decode_mtl_texture(line, effect, aux_file_loader):
     texture_data = aux_file_loader(line)
     if texture_data is None:
         return (None, None)
-    texture_slug = slugify(line)
+    texture_slug = slugify(posixpath.splitext(line)[0])
     texture_path = texture_slug + posixpath.splitext(line)[1]
     cimage = collada.material.CImage(texture_slug, "./%s" % texture_path)
     cimage.data = texture_data
