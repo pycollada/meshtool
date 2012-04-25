@@ -199,6 +199,10 @@ def loadMaterialLib(data, namer, aux_file_loader=None):
             color = decode_mtl_color(line)
             if color is not None:
                 current_effect.ambient = color
+        elif command == 'Ke':
+            color = decode_mtl_color(line)
+            if color is not None:
+                current_effect.emission = color
         elif command == 'Ks':
             color = decode_mtl_color(line)
             if color is not None:
@@ -227,6 +231,11 @@ def loadMaterialLib(data, namer, aux_file_loader=None):
             cimg, texmap = decode_mtl_texture(line, current_effect, aux_file_loader)
             if texmap is not None:
                 current_effect.specular = texmap
+                cimages.append(cimg)
+        elif command == 'map_bump' or command == 'bump':
+            cimg, texmap = decode_mtl_texture(line, current_effect, aux_file_loader)
+            if texmap is not None:
+                current_effect.bumpmap = texmap
                 cimages.append(cimg)
         
         else:
@@ -503,6 +512,11 @@ def filepath_loader(obj_filename):
             # try with replacing backslashes
             auxpath = auxpath.replace('\\', '/')
             auxloc = os.path.normpath(os.path.join(obj_dir, auxpath))
+        if not os.path.isfile(auxloc):
+            # try turning absolute paths into relative by stripping out leading part
+            if auxpath.startswith('/'):
+                auxpath = auxpath[1:]
+                auxloc = os.path.normpath(os.path.join(obj_dir, auxpath))
         if os.path.isfile(auxloc):
             f = open(auxloc, 'rb')
             return f.read()
