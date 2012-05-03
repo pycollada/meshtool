@@ -14,9 +14,14 @@ import gc
 import sys
 import random
 import collada
-import Image
-import ImageDraw
-import PIL.ImageFile as ImageFile
+try:
+    from PIL import Image
+    from PIL import ImageDraw
+    from PIL import ImageFile
+except ImportError:
+    import Image
+    import ImageDraw
+    import ImageFile
 from meshtool.filters.atlas_filters.rectpack import RectPack
 from StringIO import StringIO
 import meshtool.filters

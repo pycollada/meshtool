@@ -4,11 +4,17 @@ import os.path
 import posixpath
 
 import collada
-import Image
+try:
+    from PIL import Image
+except ImportError:
+    import Image
 from StringIO import StringIO
 import math
 import tarfile
-import ImageFile
+try:
+    from PIL import ImageFile
+except ImportError:
+    import ImageFile
 
 def getMipMaps(mesh):
     #Following is a workaround for setting quality=95, optimize=1 when encoding JPEG

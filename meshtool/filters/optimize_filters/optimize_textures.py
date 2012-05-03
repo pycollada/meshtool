@@ -1,10 +1,16 @@
 from meshtool.args import *
 from meshtool.filters.base_filters import *
 import collada
-import Image
+try:
+    from PIL import Image
+except ImportError:
+    import Image
 import sys
 from StringIO import StringIO
-import ImageFile
+try:
+    from PIL import ImageFile
+except ImportError:
+    import ImageFile
 import numpy
 
 def optimizeTextures(mesh):
