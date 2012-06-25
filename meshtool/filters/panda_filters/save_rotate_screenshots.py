@@ -2,7 +2,10 @@ from meshtool.args import *
 from meshtool.filters.base_filters import *
 import os.path
 from math import pi
-import Image
+try:
+    from PIL import Image
+except ImportError:
+    import Image
 
 from meshtool.filters.panda_filters.pandacore import setupPandaApp, getScreenshot, setCameraAngle
 
