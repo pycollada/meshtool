@@ -24,9 +24,9 @@ def v3_array_pt_dist(arr, pt):
 
 def centerFromBounds(bounds):
     minpt, maxpt = bounds
-    x = (maxpt[0] - minpt[0]) / 2
-    y = (maxpt[1] - minpt[1]) / 2
-    z = (maxpt[2] - minpt[2]) / 2
+    x = ((maxpt[0] - minpt[0]) / 2) + minpt[0]
+    y = ((maxpt[1] - minpt[1]) / 2) + minpt[1]
+    z = ((maxpt[2] - minpt[2]) / 2) + minpt[2]
     return numpy.array([x,y,z], dtype=numpy.float32)
 
 def iter_prims(mesh):
