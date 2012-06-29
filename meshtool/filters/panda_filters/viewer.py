@@ -2,12 +2,13 @@ from meshtool.args import *
 from meshtool.filters.base_filters import *
 
 from pandacore import setupPandaApp, getBaseNodePath
-from pandacontrols import KeyboardMovement, MouseDrag, MouseScaleZoom, MouseCamera
+from pandacontrols import KeyboardMovement, MouseDrag, MouseScaleZoom, MouseCamera, ButtonUtils
 
 def runViewer(mesh):
     p3dApp = setupPandaApp(mesh)
     p3dApp.render.analyze()
     KeyboardMovement()
+    ButtonUtils(getBaseNodePath(p3dApp.render))
     MouseDrag(getBaseNodePath(p3dApp.render))
     MouseScaleZoom(getBaseNodePath(p3dApp.render))
     MouseCamera()

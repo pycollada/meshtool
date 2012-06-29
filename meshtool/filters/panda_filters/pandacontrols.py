@@ -68,6 +68,20 @@ class KeyboardMovement(DirectObject):
         self.cam_p += scale * p
         self.cam_r += scale * r
 
+class ButtonUtils(DirectObject):
+    def __init__(self, node):
+        self.node = node
+        self.wireframe = False
+        self.accept('i', self.toggleWireframe)
+
+    def toggleWireframe(self):
+        self.wireframe = not self.wireframe
+        
+        if self.wireframe:
+            self.node.setRenderModeWireframe()
+        else:
+            self.node.setRenderModeFilled()
+
 class MouseCamera(DirectObject):
     def __init__(self):
         

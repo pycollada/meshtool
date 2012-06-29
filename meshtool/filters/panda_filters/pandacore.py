@@ -366,7 +366,7 @@ def addTextureStage(texId, texMode, texAttr, tex):
     return texAttr
 
 def getStateFromMaterial(prim_material, texture_cache):
-    state = RenderState.makeFullDefault()
+    state = RenderState.makeEmpty()
     
     mat = Material()
     texattr = TextureAttrib.makeAllOff()
