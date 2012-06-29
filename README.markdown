@@ -51,6 +51,7 @@ format
 * ``--print_scene`` - Prints the default scene tree
 * ``--print_render_info`` - Prints estimated number of batches, total number of
 triangles, and total texture memory
+* ``--print_bounds`` - Prints bounds information about the mesh
 
 View
 ----
