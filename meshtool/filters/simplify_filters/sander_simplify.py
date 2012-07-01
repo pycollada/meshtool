@@ -222,7 +222,7 @@ def drawChart(chart_tris, border_verts, new_uvs, newvert2idx):
     del draw
     im.show()
 
-def transformblit(src_tri, dst_tri, src_img, dst_img):
+def transformblit(src_tri, dst_tri, src_img, dst_img, alpha=255):
     """Pastes a triangular region from one image
     into a triangular region in another image by
     using an affine transformation"""
@@ -259,9 +259,9 @@ def transformblit(src_tri, dst_tri, src_img, dst_img):
 
     transformed = src_img.transform((sizex, sizey), Image.AFFINE, A, Image.BICUBIC)
     
-    mask = Image.new('1', (sizex, sizey))
+    mask = Image.new('1' if alpha == 255 else 'L', (sizex, sizey))
     maskdraw = ImageDraw.Draw(mask)
-    maskdraw.polygon(((y11,y12), (y21,y22), (y31,y32)), outline=255, fill=255)
+    maskdraw.polygon(((y11,y12), (y21,y22), (y31,y32)), outline=alpha, fill=alpha)
 
     dst_img.paste(transformed, (minx, miny), mask=mask)
 
