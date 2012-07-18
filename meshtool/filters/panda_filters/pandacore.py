@@ -22,7 +22,7 @@ from panda3d.core import GeomVertexData, GeomEnums, GeomVertexWriter
 from panda3d.core import GeomLines, GeomTriangles, Geom, GeomNode, NodePath
 from panda3d.core import PNMImage, Texture, StringStream
 from panda3d.core import RenderState, TextureAttrib, MaterialAttrib, Material
-from panda3d.core import TextureStage, RigidBodyCombiner, CullFaceAttrib, TransparencyAttrib
+from panda3d.core import TextureStage, RigidBodyCombiner, CullFaceAttrib, TransparencyAttrib, ColorScaleAttrib
 from panda3d.core import VBase4, Vec4, Mat4, SparseArray, Vec3
 from panda3d.core import AmbientLight, DirectionalLight, PointLight, Spotlight
 from panda3d.core import Character, PartGroup, CharacterJoint
@@ -365,7 +365,12 @@ def addTextureStage(texId, texMode, texAttr, tex):
         texAttr = texAttr.addOnStage(ts, tex)
     return texAttr
 
-def getStateFromMaterial(prim_material, texture_cache):
+# luminance function, based on the ISO/CIE color standards
+# see ITU-R Recommendation BT.709-4
+def luminance(c):
+    return c[0] * 0.212671 + c[1] * 0.715160 + c[2] * 0.072169
+
+def getStateFromMaterial(prim_material, texture_cache, col_inst=None):
     state = RenderState.makeEmpty()
     
     mat = Material()
@@ -374,8 +379,8 @@ def getStateFromMaterial(prim_material, texture_cache):
     hasDiffuse = False
     if prim_material and prim_material.effect:
         
-        diffuse = getattr(prim_material.effect, 'diffuse')
-        transparent = getattr(prim_material.effect, 'transparent')
+        diffuse = getattr(prim_material.effect, 'diffuse', None)
+        transparent = getattr(prim_material.effect, 'transparent', None)
         if isinstance(diffuse, collada.material.Map) and isinstance(transparent, collada.material.Map):
             if diffuse.sampler.surface.image == transparent.sampler.surface.image:
                 #some exporters put the same map in the diffuse channel
@@ -402,18 +407,72 @@ def getStateFromMaterial(prim_material, texture_cache):
         if type(diffuse) is tuple:
             mat.setDiffuse(v4fromtuple(diffuse))
         
-        emission = getattr(prim_material.effect, 'emission')
+        # hack to look for sketchup version < 8 where transparency was exported flipped
+        # also ColladaMaya v2.03b had this same issue
+        flip_alpha = False
+        if col_inst and col_inst.assetInfo:
+            for contributor in col_inst.assetInfo.contributors:
+                tool_name = contributor.authoring_tool
+                split = tool_name.split()
+                if len(split) == 3 and \
+                      split[0].strip().lower() == 'google' and \
+                      split[1].strip().lower() == 'sketchup':
+                    version = split[2].strip().split('.')
+                    try:
+                        major_version = int(version[0])
+                        if major_version < 8:
+                            flip_alpha = True
+                    except (ValueError, TypeError):
+                        continue
+                    
+                try:
+                    collada_maya_idx = split.index('ColladaMaya')
+                    if split[collada_maya_idx + 1] == 'v2.03b':
+                        flip_alpha = True
+                except (ValueError, IndexError):
+                    continue
+        
+        if type(transparent) is tuple:
+            trR, trG, trB = transparent[0], transparent[1], transparent[2]
+            trA = transparent[3] if len(transparent) > 3 else 1.0
+        else:
+            trR, trG, trB = 1.0, 1.0, 1.0
+            trA = 1.0
+        
+        transparency = getattr(prim_material.effect, 'transparency', 1.0)
+        if transparency is None:
+            transparency = 1.0
+        a_one = prim_material.effect.opaque_mode == collada.material.OPAQUE_MODE.A_ONE
+        if a_one:
+            alphaR = alphaG = alphaB = alphaA = transparency * trA
+        else:
+            alphaR = transparency * trR
+            alphaG = transparency * trG
+            alphaB = transparency * trB
+            alphaA = luminance([trR, trG, trB])
+            flip_alpha = not flip_alpha
+        
+        if flip_alpha:
+            alphaR = 1.0 - alphaR
+            alphaG = 1.0 - alphaG
+            alphaB = 1.0 - alphaB
+            alphaA = 1.0 - alphaA
+        
+        if alphaA < 1.0:
+            state = state.addAttrib(ColorScaleAttrib.make(VBase4(alphaR, alphaG, alphaB, alphaA)))
+        
+        emission = getattr(prim_material.effect, 'emission', None)
         if isinstance(emission, collada.material.Map):
             emissionTexture = getTexture(alpha=emission, texture_cache=texture_cache)
             texattr = addTextureStage('tsEmiss', TextureStage.MGlow, texattr, emissionTexture)
         elif type(emission) is tuple:
             mat.setEmission(v4fromtuple(emission))
         
-        ambient = getattr(prim_material.effect, 'ambient')
+        ambient = getattr(prim_material.effect, 'ambient', None)
         if type(ambient) is tuple:
             mat.setAmbient(v4fromtuple(ambient))
         
-        specular = getattr(prim_material.effect, 'specular')
+        specular = getattr(prim_material.effect, 'specular', None)
         if isinstance(specular, collada.material.Map):
             specularTexture = getTexture(color=specular, texture_cache=texture_cache)
             texattr = addTextureStage('tsSpec', TextureStage.MGloss, texattr, specularTexture)
@@ -421,7 +480,7 @@ def getStateFromMaterial(prim_material, texture_cache):
         elif type(specular) is tuple:
             mat.setSpecular(v4fromtuple(specular))
 
-        shininess = getattr(prim_material.effect, 'shininess')
+        shininess = getattr(prim_material.effect, 'shininess', None)
         #this sets a sane value for blinn shading
         if shininess <= 1.0:
             if shininess < 0.01:
@@ -429,7 +488,7 @@ def getStateFromMaterial(prim_material, texture_cache):
             shininess = shininess * 128.0
         mat.setShininess(shininess)
 
-        bumpmap = getattr(prim_material.effect, 'bumpmap')
+        bumpmap = getattr(prim_material.effect, 'bumpmap', None)
         if isinstance(bumpmap, collada.material.Map):
             bumpTexture = getTexture(color=bumpmap, texture_cache=texture_cache)
             texattr = addTextureStage('tsBump', TextureStage.MNormal, texattr, bumpTexture)
@@ -439,7 +498,7 @@ def getStateFromMaterial(prim_material, texture_cache):
 
     if hasDiffuse:
         state = state.addAttrib(DepthOffsetAttrib.make(1))
-
+    
     state = state.addAttrib(MaterialAttrib.make(mat))
     state = state.addAttrib(texattr)
     
@@ -576,11 +635,11 @@ def getGeomFromPrim(prim, matstate):
     pgeom.addPrimitive(gprim)
     return pgeom
 
-def recurseScene(curnode, scene_members, data_cache, M, texture_cache):
+def recurseScene(curnode, scene_members, data_cache, M, texture_cache, col_inst=None):
     M = numpy.dot(M, curnode.matrix)
     for node in curnode.children:
         if isinstance(node, collada.scene.Node):
-            recurseScene(node, scene_members, data_cache, M, texture_cache)
+            recurseScene(node, scene_members, data_cache, M, texture_cache, col_inst=col_inst)
         elif isinstance(node, collada.scene.GeometryNode) or isinstance(node, collada.scene.ControllerNode):
             if isinstance(node, collada.scene.GeometryNode):
                 geom = node.geometry
@@ -598,7 +657,7 @@ def recurseScene(curnode, scene_members, data_cache, M, texture_cache):
                     if mat is not None:
                         matstate = data_cache['material2state'].get(mat.target)
                         if matstate is None:
-                            matstate = getStateFromMaterial(mat.target, texture_cache)
+                            matstate = getStateFromMaterial(mat.target, texture_cache, col_inst)
                             if geom.double_sided:
                                 matstate = matstate.addAttrib(CullFaceAttrib.make(CullFaceAttrib.MCullNone))
                             data_cache['material2state'][mat.target] = matstate
@@ -629,7 +688,7 @@ def getSceneMembers(col):
     texture_cache = {}
     if col.scene is not None:
         for node in col.scene.nodes:
-            recurseScene(node, scene_members, data_cache, m, texture_cache)
+            recurseScene(node, scene_members, data_cache, m, texture_cache, col_inst=col)
     
     return scene_members
 
@@ -662,7 +721,7 @@ def setupPandaApp(mesh):
         geomPath.setMat(mat4)
         
     rbc.collect()
-        
+    
     ensureCameraAt(nodePath, base.camera)
     base.disableMouse()
     attachLights(render)
