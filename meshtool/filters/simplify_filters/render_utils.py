@@ -29,6 +29,17 @@ def gen_color2(N):
     for x in HSV_tuples:
         yield map(lambda x:int(x * 256), colorsys.hsv_to_rgb(*x))
 
+def gen_color3(N):
+    import matplotlib.cm
+    import random
+    
+    cm = matplotlib.cm.get_cmap('Accent')
+    N = float(N)
+    colors = [map(lambda x:int(x * 256), cm(i/N)) for i in range(int(N))]
+    random.shuffle(colors)
+    for i in range(int(N)):
+        yield colors[i]
+
 def gen_color():
     """generator for getting n of evenly distributed colors using
     hsv color and golden ratio. It always return same order of colors
@@ -51,7 +62,7 @@ def gen_color():
 def renderCharts(facegraph, verts, vert_indices, lineset=None):
     
     from meshtool.filters.panda_filters.pandacore import getVertexData, attachLights, ensureCameraAt
-    from meshtool.filters.panda_filters.pandacontrols import KeyboardMovement, MouseDrag, MouseScaleZoom
+    from meshtool.filters.panda_filters.pandacontrols import KeyboardMovement, MouseDrag, MouseScaleZoom, ButtonUtils
     from panda3d.core import GeomTriangles, Geom, GeomNode, GeomVertexFormat, GeomVertexData, GeomVertexWriter, LineSegs
     from direct.showbase.ShowBase import ShowBase
        
@@ -61,7 +72,7 @@ def renderCharts(facegraph, verts, vert_indices, lineset=None):
     vertex=GeomVertexWriter(vdata, 'vertex')
     color=GeomVertexWriter(vdata, 'color')
     
-    colors = gen_color()
+    colors = gen_color3(len(facegraph))
     numtris = 0
     for chart, data in facegraph.nodes_iter(data=True):
         curcolor = next(colors)
@@ -131,6 +142,7 @@ def renderCharts(facegraph, verts, vert_indices, lineset=None):
     base.cam.lookAt(boundingSphere.getCenter())
     
     KeyboardMovement()
+    ButtonUtils(geomPath)
     MouseDrag(geomPath)
     MouseScaleZoom(geomPath)
     #render.setShaderAuto()
