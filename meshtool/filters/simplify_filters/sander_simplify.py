@@ -15,6 +15,12 @@ import sys
 import random
 import collada
 try:
+    from ipdb import launch_ipdb_on_exception
+    USE_IPDB = True
+except ImportError:
+    USE_IPDB = False
+
+try:
     from PIL import Image
     from PIL import ImageDraw
     from PIL import ImageFile
@@ -1015,6 +1021,16 @@ class SanderSimplify(object):
             if nx.algorithms.components.connected.number_connected_components(connected_components_graph) > 1:
                 continue
             if len(nx.algorithms.cycles.cycle_basis(connected_components_graph)) > 1:
+                continue
+            
+            # check if either new set of edges would be more than one connected component
+            graph1 = nx.from_edgelist(new_edges1)
+            if nx.algorithms.components.connected.number_connected_components(graph1) > 1:
+                print 'quitting for faces1', face1, face2
+                continue
+            graph2 = nx.from_edgelist(new_edges2)
+            if nx.algorithms.components.connected.number_connected_components(graph2) > 1:
+                print 'quitting for faces1', face1, face2
                 continue
                 
             #ideally we would swap these edges, but this would require revisiting these faces
@@ -2113,7 +2129,11 @@ def FilterGenerator():
                 pmout = pm_file
             
             s = SanderSimplify(mesh, pmout)
-            mesh = s.simplify()
+            if USE_IPDB:
+                with launch_ipdb_on_exception():
+                    mesh = s.simplify()
+            else:
+                mesh = s.simplify()
             return mesh
     return SandlerSimplificationFilter()
 from meshtool.filters import factory
