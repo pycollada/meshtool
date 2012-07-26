@@ -638,11 +638,11 @@ class SanderSimplify(object):
     
             #check if boundary is more than one connected component
             connected_components_graph = nx.from_edgelist(combined_edges)
-            if nx.algorithms.components.connected.number_connected_components(connected_components_graph) > 1:
+            if nx.number_connected_components(connected_components_graph) > 1:
                 continue
             #check if boundary has more than one cycle, which can happen when one chart is
             # connected to another by an interior edge
-            if len(nx.algorithms.cycles.cycle_basis(connected_components_graph)) != 1:
+            if len(nx.cycle_basis(connected_components_graph)) != 1:
                 continue
     
             # if the number of corners of the merged face is less than 3, disqualify it
@@ -705,7 +705,7 @@ class SanderSimplify(object):
                 connected_components_graph.add_nodes_from(commonverts)
     
                 #invalid merge if border between merged face and neighbor is more than one connected component
-                if nx.algorithms.components.connected.number_connected_components(connected_components_graph) != 1:
+                if nx.number_connected_components(connected_components_graph) != 1:
                     invalidmerge = True
                     break
                 
@@ -1026,19 +1026,17 @@ class SanderSimplify(object):
                 
             #check if boundary is more than one connected component
             connected_components_graph = nx.from_edgelist(new_combined_edges)
-            if nx.algorithms.components.connected.number_connected_components(connected_components_graph) > 1:
+            if nx.number_connected_components(connected_components_graph) > 1:
                 continue
-            if len(nx.algorithms.cycles.cycle_basis(connected_components_graph)) > 1:
+            if len(nx.cycle_basis(connected_components_graph)) > 1:
                 continue
             
             # check if either new set of edges would be more than one connected component
             graph1 = nx.from_edgelist(new_edges1)
-            if nx.algorithms.components.connected.number_connected_components(graph1) > 1:
-                print 'quitting for faces1', face1, face2
+            if nx.number_connected_components(graph1) > 1:
                 continue
             graph2 = nx.from_edgelist(new_edges2)
-            if nx.algorithms.components.connected.number_connected_components(graph2) > 1:
-                print 'quitting for faces1', face1, face2
+            if nx.number_connected_components(graph2) > 1:
                 continue
                 
             #ideally we would swap these edges, but this would require revisiting these faces
@@ -1793,6 +1791,34 @@ class SanderSimplify(object):
             
         self.end_operation()
 
+    def enforce_simplification(self):
+        if len(self.tris_left) < TRIANGLE_MAXIMUM:
+            return
+        self.begin_operation('Enforcing simplification...')
+        
+        list_tris_left = numpy.array(list(self.tris_left), dtype=numpy.int32)
+        areas3d = tri_areas_3d(self.all_vertices[self.all_vert_indices[list_tris_left]])
+        sorted_indices = numpy.argsort(areas3d)
+        list_tris_left = list_tris_left[sorted_indices]
+        
+        i = 0
+        while len(self.tris_left) > TRIANGLE_MAXIMUM:
+            tri = list_tris_left[i]
+            i += 1
+            tri_idx = self.all_vert_indices[tri]
+            self.simplify_operations.append((STREAM_OP.TRIANGLE_ADDITION,
+                                             tri,
+                                             tri_idx,
+                                             self.all_normal_indices[tri],
+                                             self.new_uv_indices[tri]))
+            
+            for v in tri_idx:
+                self.vertexgraph.node[v]['tris'].discard(tri)
+                
+            self.tris_left.remove(tri)
+        
+        self.end_operation()
+
     def pack_charts(self):
         self.begin_operation('(Step 6 of 7) Creating and packing charts into atlas...')
         self.atlasimg = Image.new('RGB', (self.chart_packing.width, self.chart_packing.height))
@@ -2082,13 +2108,17 @@ class SanderSimplify(object):
         self.build_face_graph()
         
         #renderCharts(self.facegraph, self.all_vertices, self.all_vert_indices)
+        print 'number of vertices =', len(self.vertexgraph)
         print 'number of faces =', len(self.facegraph)
-        print 'connected components =', nx.algorithms.components.connected.number_connected_components(self.vertexgraph)
+        print 'connected vertex components =', nx.number_connected_components(self.vertexgraph)
+        print 'connected face components =', nx.number_connected_components(self.facegraph)
         
         self.initialize_chart_merge_errors()
         self.merge_charts()
         
         print 'number of charts =', len(self.facegraph)
+        print 'connected face components =', nx.number_connected_components(self.facegraph)
+        
         #renderCharts(self.facegraph, self.all_vertices, self.all_vert_indices)
         
         self.update_corners()
@@ -2106,7 +2136,9 @@ class SanderSimplify(object):
         
         self.initialize_simplification_errors()
         self.simplify_mesh()
-        print 'number of faces in base mesh =', len(self.tris_left)
+        print 'number of faces in base mesh after simplification =', len(self.tris_left)
+        self.enforce_simplification()
+        print 'number of faces in base mesh after enforced simplification =', len(self.tris_left)
         
         self.normalize_uvs()
         self.pack_charts()
