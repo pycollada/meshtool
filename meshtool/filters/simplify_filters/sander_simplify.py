@@ -56,6 +56,14 @@ ImageFile.MAXBLOCK = 20*1024*1024 # default is 64k, setting to 20MB to handle la
 MERGE_ERROR_THRESHOLD = 0.91
 SIMPLIFICATION_ERROR_THRESHOLD = 0.90
 
+# if the mesh is less than this many triangles, don't make a progressive stream
+TRIANGLE_MINIMUM = 10000
+# keep trying to simplify if mesh is bigger than this, even if we think we should stop
+TRIANGLE_MAXIMUM = 40000
+# if the number of triangles in the progressive stream is less than this fraction of
+# the total mesh, don't make a progressive stream
+STREAM_THRESHOLD = 0.2
+
 def timer():
     begintime = datetime.datetime.now()
     while True:
@@ -1688,7 +1696,7 @@ class SanderSimplify(object):
                 logrel = math.log(1 + error) / math.log(1 + self.maxerror)
                 #print 'error', error, 'maxerror', self.maxerror, 'logrel', logrel, 'v1', v1, 'v2', v2, 'numverts', len(self.vertexgraph), 'numfaces', len(self.tris_left), 'contractions left', len(self.contraction_priorities)
             else: logrel = 0
-            if logrel > SIMPLIFICATION_ERROR_THRESHOLD:
+            if logrel > SIMPLIFICATION_ERROR_THRESHOLD and len(self.tris_left) < TRIANGLE_MAXIMUM:
                 break
             
             v2tris = list(self.vertexgraph.node[v2]['tris'])
@@ -2109,7 +2117,7 @@ class SanderSimplify(object):
         #if the full resolution mesh is less than 10k tris
         # or the stream is less than 20% of the total
         # then don't bother with the stream at all
-        if self.orig_tri_count < 10000 or float(self.orig_tri_count - self.base_tri_count) / self.orig_tri_count < 0.20:
+        if self.orig_tri_count < TRIANGLE_MINIMUM or float(self.orig_tri_count - self.base_tri_count) / self.orig_tri_count < STREAM_THRESHOLD:
             self.base_tri_count = self.orig_tri_count
             self.add_back_pm()
         else:
