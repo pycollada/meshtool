@@ -275,6 +275,7 @@ def textureFromData(image_data, filename=""):
             
         if success != 0:
             tex = myTexture
+            tex.setMinfilter(Texture.FTLinearMipmapLinear)
             
     return tex
 
