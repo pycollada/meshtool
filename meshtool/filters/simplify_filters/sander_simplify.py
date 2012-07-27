@@ -1384,8 +1384,8 @@ class SanderSimplify(object):
             if chart_height > (TEXTURE_DIMENSION / 2.0):
                 chart_width += fair_share / (TEXTURE_DIMENSION / 2.0)
                 chart_height = (TEXTURE_DIMENSION / 2.0)
-            if chart_width < 4: chart_width = 4.0
-            if chart_height < 4: chart_height = 4.0
+            if chart_width < 8: chart_width = 8.0
+            if chart_height < 8: chart_height = 8.0
             
             #round to power of 2 with 1 pixel border
             chart_width = int(math.pow(2, round(math.log(chart_width, 2)))) - 2
@@ -2054,11 +2054,7 @@ class SanderSimplify(object):
         newmesh.assetInfo.revision = self.mesh.assetInfo.revision
         newmesh.assetInfo.keywords = self.mesh.assetInfo.keywords
         newmesh.assetInfo.upaxis = self.mesh.assetInfo.upaxis
-        for contributor in self.mesh.assetInfo.contributors:
-            newcontributor = collada.asset.Contributor(contributor.author, contributor.authoring_tool,
-                                                       contributor.comments, contributor.copyright,
-                                                       contributor.source_data)
-            newmesh.assetInfo.contributors.append(newcontributor)
+        
         sander_contributor = collada.asset.Contributor(authoring_tool='meshtool',
                                                        comments='Retextured and simplified base mesh using Texture Mapping Progressive Meshes, Sander et al.')
         newmesh.assetInfo.contributors.append(sander_contributor)
