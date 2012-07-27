@@ -6,11 +6,8 @@ from math import pi
 
 class KeyboardMovement(DirectObject):
     def __init__(self, scale=1.0):
-
-        #Controls how fast movement is        
-        self.POS_SPEED = 1000 * scale
-        #Controls how fast camera movement is
-        self.CAM_SPEED = 5 * scale
+        self.scale = scale
+        self.adjustSpeed()
         
         #initial values for movement of the camera
         self.cam_pos_x = 0
@@ -39,6 +36,8 @@ class KeyboardMovement(DirectObject):
             self.accept(key + '-up', self.keypress, extraArgs=unpress)
         
         self.accept('escape', sys.exit)
+        self.accept('[', self.speedDown)
+        self.accept(']', self.speedUp)
         
         movingTask = taskMgr.add(self.moving, "movingTask")
         movingTask.last = 0 
@@ -58,7 +57,21 @@ class KeyboardMovement(DirectObject):
                            camscale * self.cam_p,
                            camscale * self.cam_r)
         return Task.cont
-        
+    
+    def adjustSpeed(self):
+        #Controls how fast movement is        
+        self.POS_SPEED = 1000 * self.scale
+        #Controls how fast camera movement is
+        self.CAM_SPEED = 4 * self.scale
+
+    def speedDown(self):
+        self.scale *= 0.5
+        self.adjustSpeed()
+
+    def speedUp(self):
+        self.scale *= 2.0
+        self.adjustSpeed()
+
     def keypress(self, down, x, y, z, h, p, r):
         scale = 1 if down else -1
         self.cam_pos_x += scale * x
