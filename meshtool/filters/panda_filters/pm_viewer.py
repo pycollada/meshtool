@@ -1,5 +1,5 @@
 from meshtool.args import *
-from meshtool.filters.base_filters import *
+from meshtool.filters.base_filters import VisualizationFilter
 
 from pandacore import getSceneMembers, ensureCameraAt, attachLights
 from pandacontrols import KeyboardMovement, MouseDrag, MouseScaleZoom, MouseCamera, ButtonUtils
@@ -166,7 +166,7 @@ class PandaPmViewer:
 
 
 def FilterGenerator():
-    class PmViewer(OpFilter):
+    class PmViewer(VisualizationFilter):
         def __init__(self):
             super(PmViewer, self).__init__('pm_viewer', 'Uses panda3d to bring up a viewer of a base mesh and progressive stream')
             self.arguments.append(FileArgument("pm_file", "Path of the progressive mesh file"))

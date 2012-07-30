@@ -1,5 +1,5 @@
 from meshtool.args import *
-from meshtool.filters.base_filters import *
+from meshtool.filters.base_filters import OptimizationFilter
 import collada
 
 def stripUnusedSources(mesh):
@@ -17,7 +17,7 @@ def stripUnusedSources(mesh):
                 del geom.sourceById[srcid]
 
 def FilterGenerator():
-    class StripUnusedSourcesFilter(OpFilter):
+    class StripUnusedSourcesFilter(OptimizationFilter):
         def __init__(self):
             super(StripUnusedSourcesFilter, self).__init__('strip_unused_sources', "Strips any source arrays from geometries if they aren't referenced by any primitives")
         def apply(self, mesh):

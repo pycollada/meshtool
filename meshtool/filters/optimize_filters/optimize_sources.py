@@ -1,5 +1,5 @@
 from meshtool.args import *
-from meshtool.filters.base_filters import *
+from meshtool.filters.base_filters import OptimizationFilter
 import collada
 import numpy
 import inspect
@@ -93,7 +93,7 @@ def optimizeSources(mesh):
             geom.primitives.append(newtriset)
             
 def FilterGenerator():
-    class OptimizeSourcesFilter(OpFilter):
+    class OptimizeSourcesFilter(OptimizationFilter):
         def __init__(self):
             super(OptimizeSourcesFilter, self).__init__('optimize_sources', "Compresses sources to unique values, updating triangleset indices")
         def apply(self, mesh):

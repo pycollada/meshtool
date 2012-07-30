@@ -1,5 +1,5 @@
 from meshtool.args import *
-from meshtool.filters.base_filters import *
+from meshtool.filters.base_filters import VisualizationFilter
 
 from pandacore import setupPandaApp, getBaseNodePath
 from pandacontrols import KeyboardMovement, MouseDrag, MouseScaleZoom, MouseCamera, ButtonUtils
@@ -15,7 +15,7 @@ def runViewer(mesh):
     p3dApp.run()
 
 def FilterGenerator():
-    class PandaViewer(OpFilter):
+    class PandaViewer(VisualizationFilter):
         def __init__(self):
             super(PandaViewer, self).__init__('viewer', 'Uses panda3d to bring up a viewer')
         def apply(self, mesh):

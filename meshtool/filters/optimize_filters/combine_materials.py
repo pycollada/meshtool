@@ -1,5 +1,5 @@
 from meshtool.args import *
-from meshtool.filters.base_filters import *
+from meshtool.filters.base_filters import OptimizationFilter
 
 import collada
 
@@ -41,7 +41,7 @@ def combineMaterials(mesh):
             del mesh.materials[material.id]
 
 def FilterGenerator():
-    class CombineMaterialsFilter(OpFilter):
+    class CombineMaterialsFilter(OptimizationFilter):
         def __init__(self):
             super(CombineMaterialsFilter, self).__init__('combine_materials', 'Combines identical materials')
         def apply(self, mesh):

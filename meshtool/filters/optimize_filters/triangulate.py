@@ -1,5 +1,5 @@
 from meshtool.args import *
-from meshtool.filters.base_filters import *
+from meshtool.filters.base_filters import OptimizationFilter
 import collada
 
 def triangulate(mesh):
@@ -13,7 +13,7 @@ def triangulate(mesh):
         geom.primitives = triprims
 
 def FilterGenerator():
-    class TriangulateFilter(OpFilter):
+    class TriangulateFilter(OptimizationFilter):
         def __init__(self):
             super(TriangulateFilter, self).__init__('triangulate', 'Replaces any polylist or polygons with triangles')
         def apply(self, mesh):

@@ -18,6 +18,9 @@ class CustomAction(argparse.Action):
 
 class CustomFormatter(argparse.HelpFormatter):
     def add_arguments(self, actions):
+        # gets rid of "optional arguments" prefix
+        self.end_section()
+        
         action_list = defaultdict(list)
         
         for action in actions:
@@ -42,10 +45,12 @@ class CustomFormatter(argparse.HelpFormatter):
             for action in loaders:
                 self.add_argument(action)
             self.end_section()
+            
+        self.start_section('')
 
 def main():
     parser = argparse.ArgumentParser(
-        description='Mesh tool with various operations that can be performed.',
+        description='Tool for manipulating mesh data using pycollada.',
         formatter_class=CustomFormatter,
         usage='meshtool --load_filter [--operation] [--save_filter]')
     for filter_name in filters.factory.getFilterNames():

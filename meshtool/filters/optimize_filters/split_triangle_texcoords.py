@@ -1,5 +1,5 @@
 from meshtool.args import *
-from meshtool.filters.base_filters import *
+from meshtool.filters.base_filters import OptimizationFilter
 import collada
 import numpy
 from meshtool.filters.atlas_filters.make_atlases import getTexcoordToImgMapping, TexcoordSet, MAX_TILING_DIMENSION
@@ -230,7 +230,7 @@ def splitTriangleTexcoords(mesh):
 
             
 def FilterGenerator():
-    class SplitTriangleTexcoordsFilter(OpFilter):
+    class SplitTriangleTexcoordsFilter(OptimizationFilter):
         def __init__(self):
             super(SplitTriangleTexcoordsFilter, self).__init__('split_triangle_texcoords', "Splits triangles that span multiple texcoords into multiple triangles to better help texture atlasing")
         def apply(self, mesh):

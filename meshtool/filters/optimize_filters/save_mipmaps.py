@@ -1,5 +1,5 @@
 from meshtool.args import *
-from meshtool.filters.base_filters import *
+from meshtool.filters.base_filters import OptimizationFilter
 import os.path
 import posixpath
 
@@ -121,7 +121,7 @@ def saveMipMaps(mesh):
     return True
 
 def FilterGenerator():
-    class SaveMipMapsFilter(OpFilter):
+    class SaveMipMapsFilter(OptimizationFilter):
         def __init__(self):
             super(SaveMipMapsFilter, self).__init__('save_mipmaps', 'Saves mipmaps to disk in tar format in the same location as textures but with an added .tar. The archive will contain PNG or JPG images.')
         def apply(self, mesh):

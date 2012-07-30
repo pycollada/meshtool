@@ -51,6 +51,11 @@ class OptimizationFilter(OpFilter):
     """Base class for a filter that performs optimizations"""
     
     CATEGORY = 'Optimizations'
+    
+class VisualizationFilter(OpFilter):
+    """Base class for a filter that is for visualization"""
+    
+    CATEGORY = 'Visualizations'
 
 class SaveFilter(OpFilter):
     """Base class for a filter that saves a mesh"""    

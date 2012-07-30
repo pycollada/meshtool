@@ -1,5 +1,5 @@
 from meshtool.args import *
-from meshtool.filters.base_filters import *
+from meshtool.filters.base_filters import OptimizationFilter
 import collada
 
 def stripLines(mesh):
@@ -8,7 +8,7 @@ def stripLines(mesh):
                            if type(prim) is not collada.lineset.LineSet]
 
 def FilterGenerator():
-    class StripLinesFilter(OpFilter):
+    class StripLinesFilter(OptimizationFilter):
         def __init__(self):
             super(StripLinesFilter, self).__init__('strip_lines', 'Strips any lines from the document')
         def apply(self, mesh):

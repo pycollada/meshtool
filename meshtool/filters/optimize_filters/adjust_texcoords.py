@@ -1,5 +1,5 @@
 from meshtool.args import *
-from meshtool.filters.base_filters import *
+from meshtool.filters.base_filters import OptimizationFilter
 import collada
 import numpy
 
@@ -78,7 +78,7 @@ def adjustTexcoords(mesh):
             geom.primitives.append(prim)
             
 def FilterGenerator():
-    class AdjustTexcoordsFilter(OpFilter):
+    class AdjustTexcoordsFilter(OptimizationFilter):
         def __init__(self):
             super(AdjustTexcoordsFilter, self).__init__('adjust_texcoords', "Adjusts texture coordinates of triangles so that they are as close to the 0-1 range as possible")
         def apply(self, mesh):

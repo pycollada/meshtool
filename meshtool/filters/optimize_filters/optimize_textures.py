@@ -1,5 +1,5 @@
 from meshtool.args import *
-from meshtool.filters.base_filters import *
+from meshtool.filters.base_filters import OptimizationFilter
 import collada
 from meshtool.util import Image
 import sys
@@ -95,7 +95,7 @@ def optimizeTextures(mesh):
         cimg.data = outbuf.getvalue()
 
 def FilterGenerator():
-    class OptimizeTexturesFilter(OpFilter):
+    class OptimizeTexturesFilter(OptimizationFilter):
         def __init__(self):
             super(OptimizeTexturesFilter, self).__init__('optimize_textures', 'Converts all textures with alpha channel to PNG and ones without to JPEG')
         def apply(self, mesh):

@@ -1,5 +1,5 @@
 from meshtool.args import *
-from meshtool.filters.base_filters import *
+from meshtool.filters.base_filters import OptimizationFilter
 from meshtool.filters.atlas_filters.rectpack import RectPack
 from meshtool.util import Image
 import math
@@ -342,7 +342,7 @@ def makeAtlases(mesh):
                 del geom.primitives[i]
 
 def FilterGenerator():
-    class MakeAtlasesFilter(OpFilter):
+    class MakeAtlasesFilter(OptimizationFilter):
         def __init__(self):
             super(MakeAtlasesFilter, self).__init__('make_atlases', 'Makes a texture atlas with the textures referenced in the ' +
                                                     'given file. Extremely conservative: will only make an atlas from texture ' +

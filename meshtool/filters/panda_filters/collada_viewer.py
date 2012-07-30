@@ -1,5 +1,5 @@
 from meshtool.args import *
-from meshtool.filters.base_filters import *
+from meshtool.filters.base_filters import VisualizationFilter
 
 from pandacore import getSceneMembers
 import numpy
@@ -153,7 +153,7 @@ def runViewer(mesh):
     base.run()
 
 def FilterGenerator():
-    class ColladaViewer(OpFilter):
+    class ColladaViewer(VisualizationFilter):
         def __init__(self):
             super(ColladaViewer, self).__init__('collada_viewer', 'Uses panda3d to bring up a viewer with lights and camera from the collada file')
         def apply(self, mesh):

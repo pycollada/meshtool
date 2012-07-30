@@ -1,5 +1,5 @@
 from meshtool.args import *
-from meshtool.filters.base_filters import *
+from meshtool.filters.base_filters import OptimizationFilter
 import collada
 import numpy
 
@@ -59,7 +59,7 @@ def generateNormals(mesh):
 
 
 def FilterGenerator():
-    class GenerateNormalsFilter(OpFilter):
+    class GenerateNormalsFilter(OptimizationFilter):
         def __init__(self):
             super(GenerateNormalsFilter, self).__init__('generate_normals', "Generates normals for any triangle sets that don't have any")
         def apply(self, mesh):

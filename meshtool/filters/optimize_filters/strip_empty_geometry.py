@@ -1,5 +1,5 @@
 from meshtool.args import *
-from meshtool.filters.base_filters import *
+from meshtool.filters.base_filters import OptimizationFilter
 import collada
 
 def stripEmptyGeometry(mesh):
@@ -33,7 +33,7 @@ def stripEmptyGeometry(mesh):
         del mesh.geometries[i]
 
 def FilterGenerator():
-    class StripEmptyGeometryFilter(OpFilter):
+    class StripEmptyGeometryFilter(OptimizationFilter):
         def __init__(self):
             super(StripEmptyGeometryFilter, self).__init__('strip_empty_geometry', 'Strips any empty geometry from the document and removes them from any scenes')
         def apply(self, mesh):

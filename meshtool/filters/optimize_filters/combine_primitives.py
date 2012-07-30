@@ -1,5 +1,5 @@
 from meshtool.args import *
-from meshtool.filters.base_filters import *
+from meshtool.filters.base_filters import OptimizationFilter
 
 import collada
 import numpy
@@ -155,7 +155,7 @@ def combinePrimitives(mesh):
     return mesh
 
 def FilterGenerator():
-    class CombinePrimitivesFilter(OpFilter):
+    class CombinePrimitivesFilter(OptimizationFilter):
         def __init__(self):
             super(CombinePrimitivesFilter, self).__init__('combine_primitives', 'Combines primitives within a geometry if they have the same sources and scene material mapping (triangle sets only)')
         def apply(self, mesh):

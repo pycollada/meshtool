@@ -1,5 +1,5 @@
 from meshtool.args import *
-from meshtool.filters.base_filters import *
+from meshtool.filters.base_filters import OptimizationFilter
 import collada
 import numpy
 
@@ -82,7 +82,7 @@ def normalizeIndices(mesh):
             geom.primitives.append(newtriset)
             
 def FilterGenerator():
-    class NormalizeIndicesFilter(OpFilter):
+    class NormalizeIndicesFilter(OptimizationFilter):
         def __init__(self):
             super(NormalizeIndicesFilter, self).__init__('normalize_indices', "Goes through all triangle sets, changing all index values to go from 1 to N, replacing sources to be size N")
         def apply(self, mesh):

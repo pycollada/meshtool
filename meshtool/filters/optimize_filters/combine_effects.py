@@ -1,5 +1,5 @@
 from meshtool.args import *
-from meshtool.filters.base_filters import *
+from meshtool.filters.base_filters import OptimizationFilter
 
 def combineEffects(mesh):
     effect_sets = []
@@ -28,7 +28,7 @@ def combineEffects(mesh):
             del mesh.effects[other.id]
 
 def FilterGenerator():
-    class CombineEffectsFilter(OpFilter):
+    class CombineEffectsFilter(OptimizationFilter):
         def __init__(self):
             super(CombineEffectsFilter, self).__init__('combine_effects', 'Combines identical effects')
         def apply(self, mesh):
