@@ -2,6 +2,7 @@ import sys
 import argparse
 from collections import defaultdict
 import meshtool.filters as filters
+from meshtool.filters.base_filters import FilterException, OpFilter, LoadFilter
 import collada
 
 def usage_exit(parser, s):
@@ -68,27 +69,27 @@ def main():
 
     (load_filter_name, load_filter_args) = ordered_args.pop(0)
     load_filter_inst = filters.factory.getInstance(load_filter_name)
-    if load_filter_inst is None or not isinstance(load_filter_inst, filters.LoadFilter):
+    if load_filter_inst is None or not isinstance(load_filter_inst, LoadFilter):
         usage_exit(parser, "first argument must be a load filter")
     try:
         collada_inst = load_filter_inst.apply(*load_filter_args)
-    except filters.FilterException, e:
+    except FilterException, e:
         sys.exit("Error: (argument %d) '%s': %s" % (1,load_filter_name,str(e)))
     if not isinstance(collada_inst, collada.Collada):
         sys.exit("Error: got an incorrect return value from filter (argument %d) '%s' " % (1, load_filter_name))
 
     for i, arg in enumerate(ordered_args):
-        filter = arg[0]
+        filter_name = arg[0]
         arguments = arg[1]
-        inst = filters.factory.getInstance(filter)
-        if inst is None or not isinstance(inst, filters.OpFilter):
-            usage_exit(parser, "specified filter (argument %d:'%s') is not an operation filter" % (i+1, filter))
+        inst = filters.factory.getInstance(filter_name)
+        if inst is None or not isinstance(inst, OpFilter):
+            usage_exit(parser, "specified filter (argument %d:'%s') is not an operation filter" % (i+1, filter_name))
         try:
             collada_inst = inst.apply(collada_inst, *arguments)
-        except filters.FilterException, e:
-            sys.exit("Error: (argument %d) '%s': %s" % (i+1,filter,str(e)))
+        except FilterException, e:
+            sys.exit("Error: (argument %d) '%s': %s" % (i+1, filter_name, str(e)))
         if not isinstance(collada_inst, collada.Collada):
-            sys.exit("Error: got an incorrect return value from filter (argument %d) '%s' " % (i+1, filter))
+            sys.exit("Error: got an incorrect return value from filter (argument %d) '%s' " % (i+1, filter_name))
 
 if __name__ == "__main__":
     main()

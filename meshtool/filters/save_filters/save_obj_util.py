@@ -1,6 +1,7 @@
 import collada
 import os.path
 from itertools import izip, chain
+from meshtool.filters.base_filters import FilterException
 
 def materialParameterAsFloat(value, default=None):
     if isinstance(value, collada.material.Map):

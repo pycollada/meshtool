@@ -159,7 +159,7 @@ def dfs_interior_nodes(G, starting, boundary, subset):
 def super_cycle(G):
     """Yields the nodes of the longest cycle available in G"""
     
-    cycles = nx.algorithms.cycles.cycle_basis(G)
+    cycles = nx.cycle_basis(G)
     if len(cycles) < 1:
         return
     cycle_sets = [set(c) for c in cycles]
