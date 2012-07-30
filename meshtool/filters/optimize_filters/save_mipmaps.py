@@ -1,5 +1,4 @@
-from meshtool.args import *
-from meshtool.filters.base_filters import OptimizationFilter
+from meshtool.filters.base_filters import OptimizationFilter, FilterException
 import os.path
 import posixpath
 

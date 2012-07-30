@@ -1,4 +1,3 @@
-from meshtool.args import *
 from meshtool.filters.base_filters import MetaFilter
 from meshtool.filters import factory
 
@@ -41,5 +40,5 @@ def FilterGenerator():
         def apply(self, mesh):
             return fullOptimizations(mesh)
     return FullOptimizationsFilter()
-from meshtool.filters import factory
+
 factory.register(FilterGenerator().name, FilterGenerator)

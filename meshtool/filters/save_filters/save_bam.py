@@ -1,5 +1,4 @@
-from meshtool.args import *
-from meshtool.filters.base_filters import *
+from meshtool.filters.base_filters import SaveFilter, FilterException
 from meshtool.filters.panda_filters import pandacore
 from panda3d.core import GeomNode, NodePath, Mat4
 import collada

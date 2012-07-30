@@ -1,5 +1,5 @@
-from meshtool.args import *
-from meshtool.filters.base_filters import *
+from meshtool.args import FilterArgument
+from meshtool.filters.base_filters import SaveFilter, FilterException
 import os.path
 from math import pi
 from meshtool.util import Image

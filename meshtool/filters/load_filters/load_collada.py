@@ -1,5 +1,4 @@
-from meshtool.args import *
-from meshtool.filters.base_filters import *
+from meshtool.filters.base_filters import LoadFilter, FilterException
 import collada
 import os
 

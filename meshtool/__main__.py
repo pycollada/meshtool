@@ -4,9 +4,9 @@ from collections import defaultdict
 import meshtool.filters as filters
 import collada
 
-def usage_exit(parser, str):
+def usage_exit(parser, s):
     parser.print_usage()
-    sys.exit("meshtool: error: " + str)
+    sys.exit("meshtool: error: " + s)
 
 class CustomAction(argparse.Action):
     def __call__(self, parser, namespace, values, option_string=None):

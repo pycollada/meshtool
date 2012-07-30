@@ -1,4 +1,3 @@
-from meshtool.args import *
 from meshtool.filters.base_filters import OptimizationFilter
 from meshtool.filters.atlas_filters.rectpack import RectPack
 from meshtool.util import Image

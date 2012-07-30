@@ -1,4 +1,4 @@
-from meshtool.filters.base_filters import *
+from meshtool.filters.base_filters import FilterFactory
 import sys
 
 factory = FilterFactory()

@@ -1,7 +1,7 @@
 import numpy
 import collada
 from meshtool.filters.panda_filters import pdae_utils
-from meshtool.args import *
+from meshtool.args import FileArgument, FilterArgument
 from meshtool.filters.base_filters import SimplifyFilter, FilterException
 
 def add_back_pm(mesh, pm_file, percent):

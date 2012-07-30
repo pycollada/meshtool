@@ -1,4 +1,3 @@
-from meshtool.args import *
 from meshtool.filters.base_filters import PrintFilter
 import collada
 

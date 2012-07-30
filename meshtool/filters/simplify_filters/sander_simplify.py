@@ -1,4 +1,4 @@
-from meshtool.args import *
+from meshtool.args import FileArgument
 from meshtool.filters.base_filters import SimplifyFilter
 import inspect
 import numpy

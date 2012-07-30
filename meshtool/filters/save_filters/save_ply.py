@@ -1,10 +1,8 @@
-from meshtool.args import *
-from meshtool.filters.base_filters import *
+from meshtool.filters.base_filters import SaveFilter, FilterException
 from itertools import chain
 import os
 import collada
 import numpy
-
 
 def FilterGenerator():
     class PlySaveFilter(SaveFilter):
@@ -12,15 +10,15 @@ def FilterGenerator():
             super(PlySaveFilter, self).__init__('save_ply', 'Saves a collada model in PLY format')
 
         def uniqify_multidim_indexes(self, sourcedata, indices, return_map=False):
-          """Just like numpy.unique except that it works with multi-dimensional arrays.
-             Given a source array and indexes into the source array, will keep only unique
-             indices into the source array, rewriting the indices to point to the new
-             compressed source array"""
-          unique_data, index_map = numpy.unique(sourcedata.view([('',sourcedata.dtype)]*sourcedata.shape[1]), return_inverse=True)
-          index_map = numpy.cast['int32'](index_map)
-          if return_map:
-              return unique_data.view(sourcedata.dtype).reshape(-1,sourcedata.shape[1]), index_map[indices], index_map
-          return unique_data.view(sourcedata.dtype).reshape(-1,sourcedata.shape[1]), index_map[indices]
+            """Just like numpy.unique except that it works with multi-dimensional arrays.
+               Given a source array and indexes into the source array, will keep only unique
+               indices into the source array, rewriting the indices to point to the new
+               compressed source array"""
+            unique_data, index_map = numpy.unique(sourcedata.view([('',sourcedata.dtype)]*sourcedata.shape[1]), return_inverse=True)
+            index_map = numpy.cast['int32'](index_map)
+            if return_map:
+                return unique_data.view(sourcedata.dtype).reshape(-1,sourcedata.shape[1]), index_map[indices], index_map
+            return unique_data.view(sourcedata.dtype).reshape(-1,sourcedata.shape[1]), index_map[indices]
 
         def aggregate_dae(self, mesh):
             all_vertices = []
@@ -67,10 +65,10 @@ def FilterGenerator():
             outputfile.write("end_header\n");
 
             for vertex in all_vertices:
-              outputfile.write( "%(v0)f %(v1)f %(v2)f\n" % {'v0':vertex[0], 'v1':vertex[1], 'v2':vertex[2]} )
+                outputfile.write( "%(v0)f %(v1)f %(v2)f\n" % {'v0':vertex[0], 'v1':vertex[1], 'v2':vertex[2]} )
 
             for face in all_faces:
-              outputfile.write( "3 %(v0)d %(v1)d %(v2)d\n" % {'v0':face[0], 'v1':face[1], 'v2':face[2] }  )
+                outputfile.write( "3 %(v0)d %(v1)d %(v2)d\n" % {'v0':face[0], 'v1':face[1], 'v2':face[2] }  )
 
             outputfile.close()
             return mesh

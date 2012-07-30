@@ -1,5 +1,4 @@
-from meshtool.args import *
-from meshtool.filters.base_filters import *
+from meshtool.filters.base_filters import SaveFilter, FilterException
 import os.path
 
 from meshtool.filters.panda_filters.pandacore import setupPandaApp, getScreenshot
