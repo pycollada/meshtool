@@ -1,5 +1,5 @@
 from meshtool.args import *
-from meshtool.filters.base_filters import *
+from meshtool.filters.base_filters import PrintFilter
 from meshtool.filters.print_filters.print_render_info import getRenderInfo
 
 try:
@@ -47,7 +47,7 @@ def getJSON(mesh):
     return json.dumps(json_ret)
 
 def FilterGenerator():
-    class PrintJsonFilter(OpFilter):
+    class PrintJsonFilter(PrintFilter):
         def __init__(self):
             super(PrintJsonFilter, self).__init__('print_json', 'Prints a bunch of information about the mesh in a JSON format')
         def apply(self, mesh):

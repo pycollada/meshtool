@@ -1,5 +1,6 @@
 import sys
 import argparse
+from collections import defaultdict
 import meshtool.filters as filters
 import collada
 
@@ -15,9 +16,38 @@ class CustomAction(argparse.Action):
         previous.append((self.dest, values))
         setattr(namespace, 'ordered_args', previous)
 
+class CustomFormatter(argparse.HelpFormatter):
+    def add_arguments(self, actions):
+        action_list = defaultdict(list)
+        
+        for action in actions:
+            if not isinstance(action, CustomAction):
+                continue
+            filter_name = action.dest
+            inst = filters.factory.getInstance(filter_name)
+            
+            action_list[inst.CATEGORY].append(action)
+        
+        order = ['Loading',
+                 'Printing',
+                 'Simplification',
+                 'Optimizations',
+                 'Meta',
+                 'Operations',
+                 'Saving']
+        
+        for section_name in order:
+            loaders = action_list[section_name]
+            self.start_section(section_name)
+            for action in loaders:
+                self.add_argument(action)
+            self.end_section()
+
 def main():
     parser = argparse.ArgumentParser(
-        description='Mesh tool with various operations that can be performed.')    
+        description='Mesh tool with various operations that can be performed.',
+        formatter_class=CustomFormatter,
+        usage='meshtool --load_filter [--operation] [--save_filter]')
     for filter_name in filters.factory.getFilterNames():
         inst = filters.factory.getInstance(filter_name)
         parser.add_argument('--' + filter_name, required=False,

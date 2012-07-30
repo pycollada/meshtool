@@ -1,5 +1,5 @@
 from meshtool.args import *
-from meshtool.filters.base_filters import *
+from meshtool.filters.base_filters import PrintFilter
 
 def getTextures(mesh):
     texs = []
@@ -8,7 +8,7 @@ def getTextures(mesh):
     return texs
 
 def FilterGenerator():
-    class PrintTexturesFilter(OpFilter):
+    class PrintTexturesFilter(PrintFilter):
         def __init__(self):
             super(PrintTexturesFilter, self).__init__('print_textures', 'Prints a list of the embedded images in the mesh')
         def apply(self, mesh):

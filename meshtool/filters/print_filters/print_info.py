@@ -1,5 +1,5 @@
 from meshtool.args import *
-from meshtool.filters.base_filters import *
+from meshtool.filters.base_filters import PrintFilter
 import collada
 
 def printMeshInfo(mesh):
@@ -35,7 +35,7 @@ def printMeshInfo(mesh):
             print indent, indent, prim
 
 def FilterGenerator():
-    class PrintInfoFilter(OpFilter):
+    class PrintInfoFilter(PrintFilter):
         def __init__(self):
             super(PrintInfoFilter, self).__init__('print_info', 'Prints a bunch of information about the mesh to the console')
         def apply(self, mesh):

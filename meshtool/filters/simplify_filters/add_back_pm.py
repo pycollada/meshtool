@@ -2,7 +2,7 @@ import numpy
 import collada
 from meshtool.filters.panda_filters import pdae_utils
 from meshtool.args import *
-from meshtool.filters.base_filters import *
+from meshtool.filters.base_filters import SimplifyFilter, FilterException
 
 def add_back_pm(mesh, pm_file, percent):
     refinements = pdae_utils.readPDAE(pm_file)
@@ -119,7 +119,7 @@ def add_back_pm(mesh, pm_file, percent):
     return mesh
 
 def FilterGenerator():
-    class AddBackPm(OpFilter):
+    class AddBackPm(SimplifyFilter):
         def __init__(self):
             super(AddBackPm, self).__init__('add_back_pm', 'Adds back mesh data from a progressive PDAE file')
             self.arguments.append(FileArgument('pm_file', 'PDAE file to load from'))

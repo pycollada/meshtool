@@ -1,5 +1,5 @@
 from meshtool.args import *
-from meshtool.filters.base_filters import *
+from meshtool.filters.base_filters import SimplifyFilter
 import inspect
 import numpy
 import networkx as nx
@@ -2154,7 +2154,7 @@ class SanderSimplify(object):
         return self.save_mesh()
 
 def FilterGenerator():
-    class SandlerSimplificationFilter(OpFilter):
+    class SandlerSimplificationFilter(SimplifyFilter):
         def __init__(self):
             super(SandlerSimplificationFilter, self).__init__('sander_simplify', 'Simplifies the mesh based on sandler, et al. method.')
             self.arguments.append(FileArgument('pm_file', 'Where to save the progressive mesh stream'))

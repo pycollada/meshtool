@@ -1,5 +1,5 @@
 from meshtool.args import *
-from meshtool.filters.base_filters import *
+from meshtool.filters.base_filters import PrintFilter
 import collada
 
 def printNode(node, depth):
@@ -16,7 +16,7 @@ def printScene(mesh):
             printNode(node, 0)
 
 def FilterGenerator():
-    class PrintSceneFilter(OpFilter):
+    class PrintSceneFilter(PrintFilter):
         def __init__(self):
             super(PrintSceneFilter, self).__init__('print_scene', 'Prints the default scene tree')
         def apply(self, mesh):

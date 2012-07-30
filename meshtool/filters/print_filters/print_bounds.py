@@ -5,7 +5,7 @@ import numpy
 import math
 
 from meshtool.filters import factory
-from meshtool.filters.base_filters import OpFilter
+from meshtool.filters.base_filters import PrintFilter
 
 INF = float('inf')
 NEGINF = float('-inf')
@@ -102,7 +102,7 @@ def printBoundsInfo(mesh):
     print 'Point farthest from center: %s at distance of %.7g' % (fmtpt(boundsinfo['center_farthest']), boundsinfo['center_farthest_distance'])
 
 def FilterGenerator():
-    class PrintBoundsFilter(OpFilter):
+    class PrintBoundsFilter(PrintFilter):
         def __init__(self):
             super(PrintBoundsFilter, self).__init__('print_bounds', 'Prints bounds information about the mesh')
         def apply(self, mesh):

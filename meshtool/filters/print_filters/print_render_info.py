@@ -1,5 +1,5 @@
 from meshtool.args import *
-from meshtool.filters.base_filters import *
+from meshtool.filters.base_filters import PrintFilter
 import collada
 import math
 import itertools
@@ -123,7 +123,7 @@ def printRenderInfo(mesh):
     print 'Number of lines: %d' % render_info['num_lines']
 
 def FilterGenerator():
-    class PrintRenderInfoFilter(OpFilter):
+    class PrintRenderInfoFilter(PrintFilter):
         def __init__(self):
             super(PrintRenderInfoFilter, self).__init__('print_render_info', 'Prints estimated number of batches, total number of triangles, and total texture memory')
         def apply(self, mesh):

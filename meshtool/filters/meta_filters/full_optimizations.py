@@ -1,5 +1,5 @@
 from meshtool.args import *
-from meshtool.filters.base_filters import *
+from meshtool.filters.base_filters import MetaFilter
 from meshtool.filters import factory
 
 def fullOptimizations(mesh):
@@ -30,7 +30,7 @@ def fullOptimizations(mesh):
 
 
 def FilterGenerator():
-    class FullOptimizationsFilter(OpFilter):
+    class FullOptimizationsFilter(MetaFilter):
         def __init__(self):
             super(FullOptimizationsFilter, self).__init__('full_optimizations', 
                     'A meta filter that runs all optimizations. Performs these filters in this order: ' +

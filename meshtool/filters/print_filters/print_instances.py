@@ -1,5 +1,5 @@
 from meshtool.args import *
-from meshtool.filters.base_filters import *
+from meshtool.filters.base_filters import PrintFilter
 import collada
 
 def printInstances(mesh):
@@ -19,7 +19,7 @@ def printInstances(mesh):
     print 'Total geometries instantiated in default scene: %d' % num_instances
 
 def FilterGenerator():
-    class PrintInstancesFilter(OpFilter):
+    class PrintInstancesFilter(PrintFilter):
         def __init__(self):
             super(PrintInstancesFilter, self).__init__('print_instances', 'Prints geometry instances from the default scene')
         def apply(self, mesh):

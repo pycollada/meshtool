@@ -1,5 +1,5 @@
 from meshtool.args import *
-from meshtool.filters.base_filters import *
+from meshtool.filters.base_filters import MetaFilter
 from meshtool.filters import factory
 
 def mediumOptimizations(mesh):
@@ -22,7 +22,7 @@ def mediumOptimizations(mesh):
 
 
 def FilterGenerator():
-    class MediumOptimizationsFilter(OpFilter):
+    class MediumOptimizationsFilter(MetaFilter):
         def __init__(self):
             super(MediumOptimizationsFilter, self).__init__('medium_optimizations', 
                     'A meta filter that runs a safe, medium-level of optimizations. Performs these filters in this order: ' +
