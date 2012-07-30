@@ -20,14 +20,7 @@ try:
 except ImportError:
     USE_IPDB = False
 
-try:
-    from PIL import Image
-    from PIL import ImageDraw
-    from PIL import ImageFile
-except ImportError:
-    import Image
-    import ImageDraw
-    import ImageFile
+from meshtool.util import Image, ImageDraw
 from meshtool.filters.atlas_filters.rectpack import RectPack
 from StringIO import StringIO
 import meshtool.filters
@@ -49,8 +42,6 @@ except ImportError:
 try: import cv
 except ImportError:
     cv = None
-
-ImageFile.MAXBLOCK = 20*1024*1024 # default is 64k, setting to 20MB to handle large textures
 
 #Error threshold values, range 0-1
 MERGE_ERROR_THRESHOLD = 0.91
