@@ -1,25 +1,13 @@
 from meshtool.args import *
 from meshtool.filters.base_filters import *
 from meshtool.filters.atlas_filters.rectpack import RectPack
-try:
-    from PIL import Image
-except ImportError:
-    import Image
+from meshtool.util import Image
 import math
 import collada
 import numpy
 import posixpath
 import itertools
 from StringIO import StringIO
-
-#Following is a workaround for setting quality=95, optimize=1 when encoding JPEG
-#Otherwise, an error is output when trying to save
-#Taken from http://mail.python.org/pipermail/image-sig/1999-August/000816.html
-try:
-    from PIL import ImageFile
-except ImportError:
-    import ImageFile
-ImageFile.MAXBLOCK = 1000000 # default is 64k
 
 #The maximum width or height of a texture
 MAX_IMAGE_DIMENSION = 4096

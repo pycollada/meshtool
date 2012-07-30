@@ -4,23 +4,12 @@ import os.path
 import posixpath
 
 import collada
-try:
-    from PIL import Image
-except ImportError:
-    import Image
+from meshtool.util import Image
 from StringIO import StringIO
 import math
 import tarfile
-try:
-    from PIL import ImageFile
-except ImportError:
-    import ImageFile
 
 def getMipMaps(mesh):
-    #Following is a workaround for setting quality=95, optimize=1 when encoding JPEG
-    #Otherwise, an error is output when trying to save
-    #Taken from http://mail.python.org/pipermail/image-sig/1999-August/000816.html
-    ImageFile.MAXBLOCK = 20*1024*1024 # default is 64k, setting to 20MB to handle large textures
     
     mipmaps = {}
     for effect in mesh.effects:

@@ -3,14 +3,7 @@ import collada
 import posixpath
 import struct
 from math import pi, sin, cos
-try:
-    from PIL import Image
-except ImportError:
-    import Image
-try:
-    from PIL import ImageOps
-except ImportError:
-    import ImageOps
+from meshtool.util import Image, ImageOps
 from StringIO import StringIO
 import inspect
 import math
