@@ -4,7 +4,6 @@ from meshtool.util import Image
 import math
 import collada
 import numpy
-import posixpath
 import itertools
 from StringIO import StringIO
 
@@ -38,11 +37,11 @@ def getTexcoordToImgMapping(mesh):
         for prim_index, prim in enumerate(geom.primitives):
             inputs = prim.getInputList().getList()
             texindex = 0
-            for offset, semantic, srcid, set in inputs:
+            for offset, semantic, srcid, setid in inputs:
                 if semantic == 'TEXCOORD':
-                    try: set = int(set)
-                    except (ValueError, TypeError): set = 0
-                    texset = TexcoordSet(geom.id, prim_index, texindex, set)
+                    try: setid = int(setid)
+                    except (ValueError, TypeError): setid = 0
+                    texset = TexcoordSet(geom.id, prim_index, texindex, setid)
                     texindex += 1
                     all_texcoords[texset] = []
     
@@ -63,13 +62,13 @@ def getTexcoordToImgMapping(mesh):
                         if type(propval) is collada.material.Map:
                             if propval.texcoord in inputmap:
                                 cimg = propval.sampler.surface.image
-                                semantic, set = inputmap[propval.texcoord]
-                                if not set: set = 0
+                                semantic, setid = inputmap[propval.texcoord]
+                                if not setid: setid = 0
                                 else:
-                                    try: set = int(set)
-                                    except (ValueError, TypeError): set = 0
+                                    try: setid = int(setid)
+                                    except (ValueError, TypeError): setid = 0
                                 if semantic == 'TEXCOORD':
-                                    texset = TexcoordSet(geom_id, prim_index, -1, set)
+                                    texset = TexcoordSet(geom_id, prim_index, -1, setid)
                                     if texset in all_texcoords:
                                         if cimg.path not in all_texcoords[texset]:
                                             all_texcoords[texset].append(cimg.path)
@@ -171,8 +170,8 @@ def packImages(mesh, img2texs, unique_images, image_scales):
             
             oldsources = prim.getInputList().getList()
             newsources = collada.source.InputList()
-            for (offset, semantic, source, set) in oldsources:
-                if semantic == 'TEXCOORD' and (set is None or int(set) == texset.texcoordset_index):
+            for (offset, semantic, source, setid) in oldsources:
+                if semantic == 'TEXCOORD' and (setid is None or int(setid) == texset.texcoordset_index):
                     orig_source = source
                     i=0
                     while source[1:] in geom.sourceById:
@@ -180,7 +179,7 @@ def packImages(mesh, img2texs, unique_images, image_scales):
                         i += 1
                     new_tex_src = collada.source.FloatSource(source[1:], texarray, ('S', 'T'))
                     geom.sourceById[source[1:]] = new_tex_src
-                newsources.addInput(offset, semantic, source, set)
+                newsources.addInput(offset, semantic, source, setid)
             
             if geom not in to_del:
                 to_del[geom] = []
@@ -312,12 +311,12 @@ def makeAtlases(mesh):
         width, height = pilimg.size
         if tile_x > 1 or tile_y > 1:
             if 'A' in pilimg.getbands():
-                format = 'RGBA'
+                imgformat = 'RGBA'
                 initval = (0,0,0,255)
             else:
-                format = 'RGB'
+                imgformat = 'RGB'
                 initval = (0,0,0)
-            tiled_img = Image.new(format, (width*tile_x, height*tile_y), initval)
+            tiled_img = Image.new(imgformat, (width*tile_x, height*tile_y), initval)
             for x in range(tile_x):
                 for y in range(tile_y):
                     tiled_img.paste(pilimg, (x*width,y*height))

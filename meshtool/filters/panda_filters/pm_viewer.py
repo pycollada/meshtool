@@ -3,12 +3,11 @@ from meshtool.filters.base_filters import VisualizationFilter
 
 from pandacore import getSceneMembers, ensureCameraAt, attachLights
 from pandacontrols import KeyboardMovement, MouseDrag, MouseScaleZoom, MouseCamera, ButtonUtils
-from direct.gui.DirectGui import DirectButton, DirectSlider, OnscreenText
+from direct.gui.DirectGui import DirectSlider, OnscreenText
 from direct.showbase.ShowBase import ShowBase
 from panda3d.core import GeomNode, TransparencyAttrib, GeomVertexWriter
 from panda3d.core import GeomVertexReader, GeomVertexRewriter, TextNode
 from panda3d.core import Mat4
-import os
 import sys
 import numpy
 import collada

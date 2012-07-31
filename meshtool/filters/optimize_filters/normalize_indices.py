@@ -30,7 +30,7 @@ def normalizeIndices(mesh):
             old_input_list = prim.getInputList().getList()
             inpl = collada.source.InputList()
             new_index = numpy.arange(len(prim.index)*3)
-            for offset, semantic, srcid, set in old_input_list:
+            for offset, semantic, srcid, setid in old_input_list:
                 old_source = geom.sourceById[srcid[1:]]
                 new_source_data = numpy.copy(old_source.data[prim.index[:,:,offset]])
                 new_source_data = new_source_data.flatten()
@@ -62,7 +62,7 @@ def normalizeIndices(mesh):
                     offset = 1
                 else:
                     offset = 0
-                inpl.addInput(offset, semantic, srcid, set)
+                inpl.addInput(offset, semantic, srcid, setid)
  
             prims_to_add.append((new_index, inpl, prim.material))
             

@@ -66,8 +66,8 @@ def renderCharts(facegraph, verts, vert_indices, lineset=None):
     from panda3d.core import GeomTriangles, Geom, GeomNode, GeomVertexFormat, GeomVertexData, GeomVertexWriter, LineSegs
     from direct.showbase.ShowBase import ShowBase
        
-    format=GeomVertexFormat.getV3c4()
-    vdata=GeomVertexData('tris', format, Geom.UHDynamic)
+    vformat = GeomVertexFormat.getV3c4()
+    vdata=GeomVertexData('tris', vformat, Geom.UHDynamic)
 
     vertex=GeomVertexWriter(vdata, 'vertex')
     color=GeomVertexWriter(vdata, 'color')

@@ -9,7 +9,7 @@ def stripUnusedSources(mesh):
                 srcid_count[srcid] = 0
         for prim in geom.primitives:
             for semantic, inputs in prim.sources.iteritems():
-                for offset, semantic, srcid, set, src in inputs:
+                for offset, semantic, srcid, setid, src in inputs:
                     srcid_count[srcid[1:]] += 1
         for srcid, count in srcid_count.iteritems():
             if count == 0:

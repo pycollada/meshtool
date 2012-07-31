@@ -1,9 +1,7 @@
 import os
 from meshtool.filters.base_filters import SaveFilter, FilterException
-from itertools import chain
 import numpy
 import collada
-import struct
 
 INDENT = 3
 SPACE = " "

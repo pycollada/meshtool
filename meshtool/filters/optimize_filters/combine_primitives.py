@@ -82,7 +82,7 @@ def combinePrimitives(mesh):
             for member in s['members']:
                 i = 0
                 for semantic in collada.source.InputList.semantics:
-                    for offset, semantic, srcid, set, srcobj in member.sources[semantic]:
+                    for offset, semantic, srcid, setid, srcobj in member.sources[semantic]:
                         selected_data = srcobj.data[member.index[:,:,offset]]
                         if len(src_arrays) == i:
                             src_arrays.append((semantic, [selected_data], srcobj.components))
@@ -104,10 +104,10 @@ def combinePrimitives(mesh):
             offset = 0
             for semantic in collada.source.InputList.semantics:
                 if semantic in concat_arrays:
-                    for set in range(len(concat_arrays[semantic])):
-                        components, concat_array = concat_arrays[semantic][set]
+                    for setid in range(len(concat_arrays[semantic])):
+                        components, concat_array = concat_arrays[semantic][setid]
                         
-                        base_source_name = "%s-%s-%s" % (geometry.id, semantic.lower(), set)
+                        base_source_name = "%s-%s-%s" % (geometry.id, semantic.lower(), setid)
                         source_name = base_source_name
                         ct = 0
                         while source_name in geometry.sourceById:
@@ -117,7 +117,7 @@ def combinePrimitives(mesh):
                         new_src = collada.source.FloatSource(source_name, concat_array, components)
                         geometry.sourceById[source_name] = new_src
                         
-                        inpl.addInput(offset, semantic, '#%s' % source_name, set)
+                        inpl.addInput(offset, semantic, '#%s' % source_name, setid)
                         index_arrays.append(numpy.arange(len(new_src)))
                         
                         offset += 1

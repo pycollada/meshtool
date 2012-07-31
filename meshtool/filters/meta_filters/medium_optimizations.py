@@ -13,8 +13,8 @@ def mediumOptimizations(mesh):
                         'optimize_textures'
                         ]
     
-    for filter in optimize_filters:
-        inst = factory.getInstance(filter)
+    for f in optimize_filters:
+        inst = factory.getInstance(f)
         mesh = inst.apply(mesh)
         
     return mesh

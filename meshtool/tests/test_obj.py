@@ -2,7 +2,6 @@ import unittest
 import os
 import collada
 from meshtool.filters.load_filters.load_obj import loadOBJ, filepath_loader
-from meshtool.util import to_unicode
 
 CURDIR = os.path.dirname(os.path.abspath(__file__))
 DATADIR = os.path.join(CURDIR, 'data')

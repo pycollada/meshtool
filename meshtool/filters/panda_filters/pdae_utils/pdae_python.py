@@ -1,4 +1,3 @@
-import sys
 import struct
 try:
     from cStringIO import StringIO

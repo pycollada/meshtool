@@ -45,8 +45,8 @@ def adjustTexcoords(mesh):
             old_input_list = prim.getInputList().getList()
             inpl = collada.source.InputList()
             new_index = numpy.copy(prim.index)
-            for offset, semantic, srcid, set in old_input_list:
-                if semantic == 'TEXCOORD' and (set == '0' or len(prim.texcoordset) == 1):
+            for offset, semantic, srcid, setid in old_input_list:
+                if semantic == 'TEXCOORD' and (setid == '0' or len(prim.texcoordset) == 1):
                     base_source_name = srcid[1:] + '-adjusted'
                     source_name = base_source_name
                     ct = 0
@@ -63,7 +63,7 @@ def adjustTexcoords(mesh):
                     
                     srcid = '#%s' % source_name
                     
-                inpl.addInput(offset, semantic, srcid, set)
+                inpl.addInput(offset, semantic, srcid, setid)
 
             newtriset = geom.createTriangleSet(new_index, inpl, prim.material)
             prims_to_add.append(newtriset)

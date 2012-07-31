@@ -1,6 +1,5 @@
 from meshtool.filters.base_filters import SaveFilter, FilterException
 import os
-import collada
 import save_obj_util
 
 def FilterGenerator():

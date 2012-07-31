@@ -108,7 +108,6 @@ def add_back_pm(mesh, pm_file, percent):
         nodes_to_check.extend(scene.nodes)
         while len(nodes_to_check) > 0:
             curnode = nodes_to_check.pop()
-            scene_nodes_to_delete = []
             for i, node in enumerate(curnode.children):
                 if isinstance(node, collada.scene.Node):
                     nodes_to_check.append(node)

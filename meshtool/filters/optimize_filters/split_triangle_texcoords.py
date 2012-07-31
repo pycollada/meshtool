@@ -55,8 +55,8 @@ def splitTriangleTexcoords(mesh):
             
             #first find the vertex and texcoord indices
             oldsources = prim.getInputList().getList()
-            for (offset, semantic, source, set) in oldsources:
-                if semantic == 'TEXCOORD' and (set is None or int(set) == 0):
+            for (offset, semantic, source, setid) in oldsources:
+                if semantic == 'TEXCOORD' and (setid is None or int(setid) == 0):
                     texindex = offset
                 elif semantic == 'VERTEX':
                     vertindex = offset
@@ -187,7 +187,7 @@ def splitTriangleTexcoords(mesh):
                 old_input_list = prim.getInputList().getList()
                 inpl = collada.source.InputList()
 
-                for offset, semantic, srcid, set in old_input_list:
+                for offset, semantic, srcid, setid in old_input_list:
                     if semantic == 'VERTEX':
                         base_source_name = srcid[1:] + '-trisplit'
                         source_name = base_source_name
@@ -201,7 +201,7 @@ def splitTriangleTexcoords(mesh):
                         vertdata = None
                         srcid = '#%s' % source_name
                         offset = vertindex
-                    elif semantic == 'TEXCOORD' and (set is None or int(set) == 0):
+                    elif semantic == 'TEXCOORD' and (setid is None or int(setid) == 0):
                         base_source_name = srcid[1:] + '-trisplit'
                         source_name = base_source_name
                         ct = 0
@@ -214,7 +214,7 @@ def splitTriangleTexcoords(mesh):
                         texdata = None
                         srcid = '#%s' % source_name
                         offset = texindex
-                    inpl.addInput(offset, semantic, srcid, set)
+                    inpl.addInput(offset, semantic, srcid, setid)
                 
                 orig_index.shape = -1
                 prims_to_add.append((orig_index, inpl, prim.material))

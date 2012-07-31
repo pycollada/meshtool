@@ -1,5 +1,4 @@
 from meshtool.filters.base_filters import OptimizationFilter
-import collada
 from meshtool.util import Image
 import sys
 from StringIO import StringIO

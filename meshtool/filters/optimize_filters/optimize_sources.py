@@ -22,7 +22,7 @@ def optimizeSources(mesh):
             
             #rebuild the input list, changing the sources
             inpl = prim.getInputList().getList()
-            for offset, semantic, srcid, set in inpl:
+            for offset, semantic, srcid, setid in inpl:
                 src = geom.sourceById[srcid[1:]]
                 semantic_sources = src_by_semantic.get(semantic, {})
                 semantic_sources[src.id] = src
@@ -71,7 +71,7 @@ def optimizeSources(mesh):
             new_index = numpy.arange(len(old_input_list)*len(prim.index)*3)
             new_index.shape = (len(prim.index), 3, len(old_input_list))
             new_offset = 0
-            for offset, semantic, srcid, set in old_input_list:
+            for offset, semantic, srcid, setid in old_input_list:
                 (source_placements, source_name, unique_data, index_locs) = src_by_semantic[semantic]
                 map_start = source_placements[srcid[1:]]
                 map_end = map_start + len(geom.sourceById[srcid[1:]])
@@ -79,7 +79,7 @@ def optimizeSources(mesh):
                 offset = new_offset
                 new_offset += 1
                 srcid = "#" + source_name
-                inpl.addInput(offset, semantic, srcid, set)
+                inpl.addInput(offset, semantic, srcid, setid)
                 
             prims_to_add.append((new_index, inpl, prim.material))
             prims_to_delete.append(prim_index)

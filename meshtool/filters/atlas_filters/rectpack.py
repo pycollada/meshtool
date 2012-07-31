@@ -1,5 +1,3 @@
-import math
-import sys
 import bisect
 
 class CouldNotPack:

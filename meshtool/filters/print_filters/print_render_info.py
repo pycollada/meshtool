@@ -3,7 +3,7 @@ import collada
 import math
 import itertools
 
-def humanize_bytes(bytes, precision=1):
+def humanize_bytes(val, precision=1):
     abbrevs = (
         (1<<50L, 'PB'),
         (1<<40L, 'TB'),
@@ -12,12 +12,12 @@ def humanize_bytes(bytes, precision=1):
         (1<<10L, 'KB'),
         (1, 'bytes')
     )
-    if bytes == 1:
+    if val == 1:
         return '1 byte'
     for factor, suffix in abbrevs:
-        if math.fabs(bytes) >= factor:
+        if math.fabs(val) >= factor:
             break
-    return '%.*f %s' % (precision, bytes / factor, suffix)
+    return '%.*f %s' % (precision, val / factor, suffix)
 
 def getTextureRAM(mesh):
     total_image_area = 0

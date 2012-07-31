@@ -13,7 +13,7 @@ def FilterGenerator():
             if os.path.exists(filename):
                 raise FilterException("specified filename already exists")
 
-            zip = zipfile.ZipFile(filename, 'w', zipfile.ZIP_DEFLATED)
+            z = zipfile.ZipFile(filename, 'w', zipfile.ZIP_DEFLATED)
 
             basename = os.path.basename(filename)
             dotloc = basename.find('.')
@@ -42,22 +42,22 @@ def FilterGenerator():
 
                 img_path = "%s/%s%s" % (dirname, base_img_name, img_ext)
                 if img_path not in prev_written:
-                    zip.writestr(img_path, img_data)
+                    z.writestr(img_path, img_data)
                     prev_written.append(img_path)
 
                 cimg.path = "./%s%s" % (base_img_name, img_ext)
 
             mtl_data = StringIO()
             save_obj_util.write_mtl(mesh, mtl_data)
-            zip.writestr("%s/%s.mtl" % (dirname, dirname), mtl_data.getvalue())
+            z.writestr("%s/%s.mtl" % (dirname, dirname), mtl_data.getvalue())
             mtl_data.close()
 
             obj_data = StringIO()
             save_obj_util.write_obj(mesh, "%s.mtl" % (dirname), obj_data)
-            zip.writestr("%s/%s.obj" % (dirname, dirname), obj_data.getvalue())
+            z.writestr("%s/%s.obj" % (dirname, dirname), obj_data.getvalue())
             obj_data.close()
 
-            zip.close()
+            z.close()
 
             return mesh
     return ObjZipSaveFilter()

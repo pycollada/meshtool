@@ -2058,8 +2058,8 @@ class SanderSimplify(object):
         
         surface = collada.material.Surface("sander-simplify-surface", cimg)
         sampler = collada.material.Sampler2D("sander-simplify-sampler", surface)
-        map = collada.material.Map(sampler, "TEX0")
-        effect = collada.material.Effect("sander-simplify-effect", [surface, sampler], "blinn", diffuse=map)
+        mapper = collada.material.Map(sampler, "TEX0")
+        effect = collada.material.Effect("sander-simplify-effect", [surface, sampler], "blinn", diffuse=mapper)
         newmesh.effects.append(effect)
         material = collada.material.Material("sander-simplify-material0", "sander-simplify-material", effect)
         newmesh.materials.append(material)
