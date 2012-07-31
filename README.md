@@ -10,6 +10,11 @@
     cd meshtool
     python meshtool --help
 
+### Optional Dependencies
+
+Some visualization filters use Panda3D. To enable the filters, install version 1.7.2 of the Panda3D SDK from here:
+http://www.panda3d.org/download.php?sdk&version=1.7.2
+
 # Examples
 
     $ python meshtool --load_collada duck.dae --print_textures
