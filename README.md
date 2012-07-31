@@ -1,26 +1,21 @@
-Installation
-============
+# Installation
 
-Release
--------
+### Release
 
     pip install meshtool
 
-Development
------------
+### Development
 
     git clone git://github.com/pycollada/meshtool.git meshtool
     cd meshtool
     python meshtool --help
 
-Examples
-========
+# Examples
 
     $ python meshtool --load_collada duck.dae --print_textures
     ./duckCM.tga
 
-Usage and Filter List
-=====================
+# Usage and Filter List
 
     usage: meshtool --load_filter [--operation] [--save_filter]
     
