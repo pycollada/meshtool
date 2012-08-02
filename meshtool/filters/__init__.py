@@ -27,6 +27,8 @@ try: import meshtool.filters.print_filters.print_render_info
 except ImportError as e: warn('print_render_info', e)
 try: import meshtool.filters.print_filters.print_bounds
 except ImportError as e: warn('print_bounds', e)
+try: import meshtool.filters.print_filters.print_pm_perceptual_error
+except ImportError as e: warn('print_pm_perceptual_error', e)
 
 #Viewer
 try: import meshtool.filters.panda_filters.viewer

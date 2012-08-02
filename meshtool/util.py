@@ -1,4 +1,5 @@
 import re
+import os
 import unicodedata
 
 try:
@@ -46,3 +47,21 @@ def slugify(value):
     value = unicodedata.normalize('NFKD', value).encode('ascii', 'ignore')
     value = unicode(_slugify_strip_re.sub('', value).strip())
     return _slugify_hyphenate_re.sub('-', value)
+
+def which(program):
+    """Returns absolute path to given executable name if exists on path"""
+    
+    def is_exe(fpath):
+        return os.path.isfile(fpath) and os.access(fpath, os.X_OK)
+
+    fpath, fname = os.path.split(program)
+    if fpath:
+        if is_exe(program):
+            return program
+    else:
+        for path in os.environ["PATH"].split(os.pathsep):
+            exe_file = os.path.join(path, program)
+            if is_exe(exe_file):
+                return exe_file
+
+    return None
