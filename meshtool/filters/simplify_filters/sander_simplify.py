@@ -1992,19 +1992,6 @@ class SanderSimplify(object):
         operations_buffer = None
         
         self.end_operation()
-        
-        self.begin_operation('Compressing base mesh...')
-
-        #compress verts
-        self.all_vertices, self.all_vert_indices = uniqify_multidim_indexes(self.all_vertices, self.all_vert_indices)
-
-        #compress normals
-        self.all_normals, self.all_normal_indices = uniqify_multidim_indexes(self.all_normals, self.all_normal_indices)
-        
-        #compress uvs
-        self.new_uvs, self.new_uv_indices = uniqify_multidim_indexes(self.new_uvs, self.new_uv_indices)
-        
-        self.end_operation()
 
     def add_back_pm(self):
         self.begin_operation('Reconstructing full mesh because progressive stream is too small...')
@@ -2021,19 +2008,6 @@ class SanderSimplify(object):
                 
             elif operation[0] == STREAM_OP.TRIANGLE_ADDITION:
                 pass
-        
-        self.end_operation()
-        
-        self.begin_operation('Compressing base mesh...')
-
-        #compress verts
-        self.all_vertices, self.all_vert_indices = uniqify_multidim_indexes(self.all_vertices, self.all_vert_indices)
-
-        #compress normals
-        self.all_normals, self.all_normal_indices = uniqify_multidim_indexes(self.all_normals, self.all_normal_indices)
-        
-        #compress uvs
-        self.new_uvs, self.new_uv_indices = uniqify_multidim_indexes(self.new_uvs, self.new_uv_indices)
         
         self.end_operation()
 
