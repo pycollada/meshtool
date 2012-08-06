@@ -407,6 +407,8 @@ def getStateFromMaterial(prim_material, texture_cache, col_inst=None):
         if col_inst and col_inst.assetInfo:
             for contributor in col_inst.assetInfo.contributors:
                 tool_name = contributor.authoring_tool
+                if tool_name is None:
+                    continue
                 split = tool_name.split()
                 if len(split) == 3 and \
                       split[0].strip().lower() == 'google' and \
