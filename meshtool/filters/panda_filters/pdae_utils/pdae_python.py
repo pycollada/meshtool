@@ -61,7 +61,7 @@ def readPDAEPartial(data, refinements_read, num_refinements):
         lines_left -= 2
     
     pm_refinements = []
-    while lines_left > 5 and refinements_read < num_refinements:
+    while lines_left > 1 and refinements_read < num_refinements:
         num_operations = readPDAEnumops(fakebuf)
         lines_left -= 1
         
@@ -76,6 +76,7 @@ def readPDAEPartial(data, refinements_read, num_refinements):
     
     data_left = data[fakebuf.tell():]
     if num_operations is not None:
+        
         data_left = "%d\n" % num_operations + data_left
     
     return (refinements_read, num_refinements, pm_refinements, data_left)

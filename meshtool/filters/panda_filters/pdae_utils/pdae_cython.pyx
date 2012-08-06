@@ -95,7 +95,7 @@ def readPDAEPartial(data, int refinements_read, num_refinements):
         lines_left -= 2
     
     cdef list pm_refinements = []
-    while lines_left > 5 and refinements_read < num_refinements:
+    while lines_left > 1 and refinements_read < num_refinements:
         num_operations = readPDAEnumops(fakebuf)
         lines_left -= 1
         
