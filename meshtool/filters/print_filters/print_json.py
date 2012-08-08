@@ -1,5 +1,6 @@
 from meshtool.filters.base_filters import PrintFilter
 from meshtool.filters.print_filters.print_render_info import getRenderInfo
+from meshtool.filters.print_filters.print_bounds import getBoundsInfo
 
 try:
     import json
@@ -42,7 +43,16 @@ def getJSON(mesh):
                 'effects': effects,
                 'images': images,
                 'primitives': primitives}
+    
     json_ret.update(getRenderInfo(mesh))
+    
+    boundsInfo = getBoundsInfo(mesh)
+    boundsInfo = {'bounds': [boundsInfo['bounds'][0].tolist(), boundsInfo['bounds'][1].tolist()],
+                  'center': boundsInfo['center'].tolist(),
+                  'center_farthest': boundsInfo['center_farthest'].tolist(),
+                  'center_farthest_distance': float(boundsInfo['center_farthest_distance'])}
+    json_ret['bounds_info'] = boundsInfo
+    
     return json.dumps(json_ret)
 
 def FilterGenerator():
