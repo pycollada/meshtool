@@ -29,6 +29,9 @@ def centerFromBounds(bounds):
     return numpy.array([x,y,z], dtype=numpy.float32)
 
 def iter_prims(mesh):
+    if mesh.scene is None:
+        return
+    
     for boundobj in itertools.chain(mesh.scene.objects('geometry'), mesh.scene.objects('controller')):
         if isinstance(boundobj, collada.geometry.BoundGeometry):
             boundgeom = boundobj
@@ -67,7 +70,11 @@ def getBoundsInfo(mesh):
         maxx = max(maxx, verts[:,:,0].max())
         maxy = max(maxy, verts[:,:,1].max())
         maxz = max(maxz, verts[:,:,2].max())
-            
+    
+    pts = [minx, maxx, miny, maxy, minz, maxz]
+    if INF in pts or NEGINF in pts:
+        minx, maxx, miny, maxy, minz, maxz = 0, 0, 0, 0, 0, 0
+    
     minpt = numpy.array([minx, miny, minz], dtype=numpy.float32)
     maxpt = numpy.array([maxx, maxy, maxz], dtype=numpy.float32)
     bounds = (minpt, maxpt)
@@ -83,6 +90,11 @@ def getBoundsInfo(mesh):
         if dists[maxidx] > maxdist:
             maxdist = dists[maxidx]
             maxpt = verts[maxidx]
+    
+    pts = [maxdist, maxpt[0], maxpt[1], maxpt[2]]
+    if INF in pts or NEGINF in pts:
+        maxdist = 0
+        maxpt[:] = 0
     
     return {
         'bounds': bounds,
