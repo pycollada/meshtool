@@ -84,6 +84,13 @@ http://www.panda3d.org/download.php?sdk&version=1.7.2
       --optimize_sources    Compresses sources to unique values, updating
                             triangleset indices
     
+    Visualizations:
+      --viewer              Uses panda3d to bring up a viewer
+      --collada_viewer      Uses panda3d to bring up a viewer with lights and
+                            camera from the collada file
+      --pm_viewer pm_file   Uses panda3d to bring up a viewer of a base mesh and
+                            progressive stream
+    
     Meta:
       --medium_optimizations
                             A meta filter that runs a safe, medium-level of

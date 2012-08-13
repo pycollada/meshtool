@@ -36,6 +36,7 @@ class CustomFormatter(argparse.HelpFormatter):
                  'Printing',
                  'Simplification',
                  'Optimizations',
+                 'Visualizations',
                  'Meta',
                  'Operations',
                  'Saving']
@@ -46,7 +47,7 @@ class CustomFormatter(argparse.HelpFormatter):
             for action in loaders:
                 self.add_argument(action)
             self.end_section()
-            
+        
         self.start_section('')
 
 def main():
