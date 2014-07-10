@@ -104,7 +104,8 @@ def write_obj(mesh, mtlfilename, f):
                 f.write("\n")
 
             # Start using the right material
-            f.write("usemtl %s\n" % boundprim.material.id)
+            if boundprim.material:
+                f.write("usemtl %s\n" % boundprim.material.id)
 
             if emit_normals and emit_texcoords:
                 format_string = "f %d/%d/%d %d/%d/%d %d/%d/%d"
