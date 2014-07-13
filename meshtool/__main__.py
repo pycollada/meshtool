@@ -1,4 +1,15 @@
 import sys
+#
+# Unfortunate kluge to get to panda3d from old distribution
+# this allows meshtool to run on Ubuntu 12.04
+#
+try:
+    import panda3d
+except:
+    print >> sys.stderr, 'panda3d not found -- adding to sys.path and trying again'
+    sys.path.append("/usr/share/panda3d")
+    sys.path.append("/usr/lib64/panda3d")
+    import panda3d    
 import argparse
 from collections import defaultdict
 import meshtool.filters as filters
